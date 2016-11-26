@@ -48,7 +48,7 @@ func (logger *responseLogger) ClfLog() {
 		RequestIP(logger.req),
 		ClfTime(),
 		logger.req.Method,
-		logger.req.URL.Path,
+		logger.req.URL,
 		logger.req.Proto,
 		logger.StatusCode,
 		logger.Bytes)
