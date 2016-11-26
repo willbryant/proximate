@@ -34,10 +34,10 @@ func prefixedHostDirector(req *http.Request) {
 	req.URL.Host = parts[1]
 	req.URL.Path = "/" + parts[2]
 	req.Host = req.URL.Host
-	if _, ok := req.Header["User-Agent"]; !ok {
-		// explicitly disable User-Agent so it's not set to default value
-		req.Header.Set("User-Agent", "")
+	if ua, ok := req.Header["User-Agent"]; ok {
+		req.Header.Set("X-Proxy-Client-Agent", ua[0])
 	}
+	req.Header.Set("User-Agent", banner())
 	fmt.Fprintf(os.Stdout, "proxying %s request to %s\n", req.Method, req.URL)
 }
 
