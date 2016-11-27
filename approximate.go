@@ -48,7 +48,7 @@ func main() {
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	listener, err := net.Listen("tcp", listenAddress + ":" + port)
+	listener, err := net.Listen("tcp", listenAddress+":"+port)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Couldn't listen on %s:%s: %s\n", listenAddress, port, err.Error())

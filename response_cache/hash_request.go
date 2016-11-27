@@ -1,12 +1,14 @@
 package response_cache
 
+import "bytes"
 import "io"
+import "io/ioutil"
 import "crypto/sha256"
 import "encoding/hex"
 import "net/http"
 import "sort"
 
-func digestRequestAndBody(req *http.Request, body []byte) ([]byte, error) {
+func digestRequestAndBody(req *http.Request) ([]byte, error) {
 	terminator := [...]byte {0}
 	hasher := sha256.New()
 
@@ -65,6 +67,15 @@ func digestRequestAndBody(req *http.Request, body []byte) ([]byte, error) {
 		}
 	}
 
+	// read the request body, and substitute our copy for the original reader since we can't rewind that
+	body := make([]byte, req.ContentLength)
+	if _, err := io.ReadFull(req.Body, body); err != nil {
+		return nil, err
+	}
+
+	req.Body.Close()
+	req.Body = ioutil.NopCloser(bytes.NewReader(body))
+
 	// hash the request body
 	if _, err := hasher.Write(body); err != nil {
 		return nil, err
@@ -80,8 +91,8 @@ func digestToHash(digest []byte) string {
 	return hex.EncodeToString(digest)
 }
 
-func HashRequestAndBody(req *http.Request, body []byte) (string, error) {
-	digest, err := digestRequestAndBody(req, body)
+func HashRequestAndBody(req *http.Request) (string, error) {
+	digest, err := digestRequestAndBody(req)
 	if err != nil {
 		return "", err
 	}

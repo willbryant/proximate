@@ -8,7 +8,6 @@ type ResponseCacheWriter struct {
 	cache *ResponseCache
 	key string
 	entry Entry
-	cacheable bool
 	original http.ResponseWriter
 }
 
@@ -26,11 +25,12 @@ func (writer *ResponseCacheWriter) Header() http.Header {
 }
 
 func (writer *ResponseCacheWriter) WriteHeader(status int) {
+	writer.entry.Status = status
+
 	if status == http.StatusOK {
 		// now that we know we're keeping the response, we want to copy the header to the Entry object
 		// we could of course have returned that from Header() above instead, but then we'd have to do
 		// a header copy even in the !StatusOK case.
-		writer.cacheable = true
 		CopyHeader(writer.entry.Header, writer.original.Header())
 		fmt.Fprintf(os.Stdout, "could enter %s into cache, status was %d\n", writer.key, status)
 	} else {
@@ -42,7 +42,7 @@ func (writer *ResponseCacheWriter) WriteHeader(status int) {
 
 func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
 	// if we're actually caching this response, keep a copy of the data
-	if writer.cacheable {
+	if writer.entry.Status == http.StatusOK {
 		writer.entry.Body = append(writer.entry.Body, data...)
 	}
 
@@ -51,7 +51,7 @@ func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
 }
 
 func (writer *ResponseCacheWriter) Close() {
-	if writer.cacheable {
+	if writer.entry.Status == http.StatusOK {
 		writer.cache.Set(writer.key, writer.entry)
 		fmt.Fprintf(os.Stdout, "entered %s into cache, response body was %d bytes\n", writer.key, len(writer.entry.Body))
 	}

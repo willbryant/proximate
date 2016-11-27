@@ -26,7 +26,7 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	return tc, nil
 }
 
-func (server approximateServer) Serve() (error) {
+func (server approximateServer) Serve() error {
 	srv := &http.Server{
 		ConnState: server.Tracker.ConnState,
 	}
