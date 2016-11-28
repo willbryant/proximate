@@ -5,10 +5,10 @@ import "net"
 import "net/http"
 import "net/http/httputil"
 import "os"
-import "github.com/willbryant/approximate/response_cache"
+import "github.com/willbryant/proximate/response_cache"
 import "strings"
 
-type approximateServer struct {
+type proximateServer struct {
 	Listener net.Listener
 	Tracker  *ConnectionTracker
 	Closed   uint32
@@ -17,8 +17,8 @@ type approximateServer struct {
 	Proxy    *httputil.ReverseProxy
 }
 
-func ApproximateServer(listener net.Listener, cacheDirectory string, quiet bool) approximateServer {
-	return approximateServer{
+func ProximateServer(listener net.Listener, cacheDirectory string, quiet bool) proximateServer {
+	return proximateServer{
 		Listener: listener,
 		Tracker:  NewConnectionTracker(),
 		Quiet:    quiet,
@@ -44,7 +44,7 @@ func cachableUploadGitPackRequest(req *http.Request) bool {
 		req.Header.Get("Authorization") == ""
 }
 
-func (server approximateServer) serveGitPackRequest(w http.ResponseWriter, req *http.Request) {
+func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *http.Request) {
 	hash, err := response_cache.HashRequestAndBody(req)
 	if err != nil {
 		http.Error(w, err.Error(), 401)
@@ -61,7 +61,7 @@ func (server approximateServer) serveGitPackRequest(w http.ResponseWriter, req *
 	}
 }
 
-func (server approximateServer) extractHostFromPrefix(req *http.Request) {
+func (server proximateServer) extractHostFromPrefix(req *http.Request) {
 	req.URL.Scheme = "https"
 	parts := strings.SplitN(req.URL.Path, "/", 3)
 	req.URL.Host = parts[1]
@@ -69,7 +69,7 @@ func (server approximateServer) extractHostFromPrefix(req *http.Request) {
 	req.Host = req.URL.Host
 }
 
-func (server approximateServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (server proximateServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	logger := &responseLogger{w: w, req: req}
 
 	server.extractHostFromPrefix(req)

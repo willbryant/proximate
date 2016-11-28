@@ -26,18 +26,18 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	return tc, nil
 }
 
-func (server approximateServer) Serve() error {
+func (server proximateServer) Serve() error {
 	srv := &http.Server{
 		ConnState: server.Tracker.ConnState,
 	}
 	return srv.Serve(tcpKeepAliveListener{server.Listener.(*net.TCPListener)})
 }
 
-func (server approximateServer) Shutdown() {
+func (server proximateServer) Shutdown() {
 	atomic.StoreUint32(&server.Closed, 1)
 	server.Listener.Close()
 }
 
-func (server approximateServer) Active() bool {
+func (server proximateServer) Active() bool {
 	return atomic.LoadUint32(&server.Closed) == 0
 }

@@ -1,6 +1,6 @@
 package main
 
-const DefaultCacheDirectory = "/var/cache/approximate"
+const DefaultCacheDirectory = "/var/cache/proximate"
 
 const DefaultListenAddress = "0.0.0.0"
 const DefaultPort = "8080"

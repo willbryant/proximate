@@ -17,9 +17,9 @@ var compiled_cache_directory string
 
 func banner() string {
 	if compiled_version != "" {
-		return "Approximate " + compiled_version
+		return "Proximate " + compiled_version
 	} else {
-		return "Approximate"
+		return "Proximate"
 	}
 }
 
@@ -57,7 +57,7 @@ func main() {
 		fmt.Fprintf(os.Stdout, "%s listening on http://%s:%s, cache in %s\n", banner(), listenAddress, port, cacheDirectory)
 	}
 
-	server := ApproximateServer(listener, cacheDirectory, quiet)
+	server := ProximateServer(listener, cacheDirectory, quiet)
 	go waitForSignals(&server)
 
 	if healthCheckPath != "" {
@@ -77,7 +77,7 @@ func main() {
 	os.Exit(0)
 }
 
-func waitForSignals(server *approximateServer) {
+func waitForSignals(server *proximateServer) {
 	signals := make(chan os.Signal, 3)
 	signal.Notify(signals, syscall.SIGINT)
 	signal.Notify(signals, syscall.SIGTERM)
@@ -90,7 +90,7 @@ func waitForSignals(server *approximateServer) {
 
 		case syscall.SIGINT, syscall.SIGTERM:
 			if !server.Quiet {
-				fmt.Fprintf(os.Stdout, "Approximate shutting down by request\n")
+				fmt.Fprintf(os.Stdout, "Proximate shutting down by request\n")
 			}
 			server.Shutdown()
 		}
