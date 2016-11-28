@@ -98,7 +98,7 @@ func waitForSignals(server *proximateServer) {
 }
 
 func setFlagFromEnvironment(f *flag.Flag) {
-	env := "VERM_" + strings.Replace(strings.ToUpper(f.Name), "-", "_", -1)
+	env := "PROXIMATE_" + strings.Replace(strings.ToUpper(f.Name), "-", "_", -1)
 	if os.Getenv(env) != "" {
 		flag.Set(f.Name, os.Getenv(env))
 	}
