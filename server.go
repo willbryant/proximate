@@ -22,7 +22,7 @@ func ProximateServer(listener net.Listener, cacheDirectory string, quiet bool) p
 		Listener: listener,
 		Tracker:  NewConnectionTracker(),
 		Quiet:    quiet,
-		Cache:    response_cache.NewResponseCache(cacheDirectory),
+		Cache:    response_cache.NewDiskCache(cacheDirectory),
 		Proxy:    &httputil.ReverseProxy{Director: setProxyUserAgentDirector},
 	}
 }

@@ -13,9 +13,7 @@ func dummyCacheEntry() Entry {
 	return entry
 }
 
-func TestResponseCacheSetAndGet(t *testing.T) {
-	cache := NewResponseCache("test")
-
+func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	entry := dummyCacheEntry()
 	cache.Set("key1", entry)
 	retrieved, ok := cache.Get("key1")
@@ -24,14 +22,12 @@ func TestResponseCacheSetAndGet(t *testing.T) {
 	if entry.Status != retrieved.Status { t.Error("Status was not restored from the cache") }
 	if !reflect.DeepEqual(entry.Header, retrieved.Header) { t.Error("Header was not restored from the cache") }
 	if !reflect.DeepEqual(entry.Body, retrieved.Body) { t.Error("Body was not restored from the cache") }
+
+	_, ok = cache.Get("key2")
+	if ok { t.Error("Cache should not contain key not set") }
 }
 
-func TestResponseCacheGetAbsentKey(t *testing.T) {
-	cache := NewResponseCache("test")
-
-	entry := dummyCacheEntry()
-	cache.Set("key1", entry)
-	_, ok := cache.Get("key2")
-
-	if ok { t.Error("Cache should not contain key not set") }
+func TestResponseCacheSetAndGet(t *testing.T) {
+	testCacheSetAndGet(t, NewMemoryCache())
+	testCacheSetAndGet(t, NewDiskCache("test"))
 }

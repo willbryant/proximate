@@ -8,7 +8,7 @@ type ResponseCache interface {
 	Set(key string, entry Entry)
 }
 
-func NewResponseCache(cacheDirectory string) memoryCache {
+func NewDiskCache(cacheDirectory string) memoryCache {
 	// TODO: implement real disk cache
 	return NewMemoryCache()
 }
