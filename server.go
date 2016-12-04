@@ -13,7 +13,7 @@ type proximateServer struct {
 	Tracker  *ConnectionTracker
 	Closed   uint32
 	Quiet    bool
-	Cache    *response_cache.ResponseCache
+	Cache    response_cache.ResponseCache
 	Proxy    *httputil.ReverseProxy
 }
 

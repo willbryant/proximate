@@ -88,7 +88,7 @@ func TestCacheWriter(t *testing.T) {
 	}
 
 	for index, scenario := range scenarios {
-		cache := NewResponseCache("test")
+		cache := NewMemoryCache()
 		cacheKey := fmt.Sprintf("cache_key_%d", index)
 		responseWriter := newDummyResponseWriter()
 		cacheWriter := NewResponseCacheWriter(cache, cacheKey, responseWriter)
