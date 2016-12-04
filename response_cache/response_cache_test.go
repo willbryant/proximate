@@ -1,6 +1,7 @@
 package response_cache
 
 import "testing"
+import "bytes"
 import "reflect"
 
 func dummyCacheEntry() Entry {
@@ -8,7 +9,7 @@ func dummyCacheEntry() Entry {
 	entry.Status = 200
 	entry.Header.Add("Host", "www.example.com")
 	entry.Header.Add("Content-Type", "text/html")
-	entry.Body = []byte("Test response body\x00test.")
+	entry.Body = bytes.NewReader([]byte("Test response body\x00test."))
 	return entry
 }
 

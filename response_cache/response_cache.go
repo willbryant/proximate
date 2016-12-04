@@ -1,6 +1,7 @@
 package response_cache
 
 import "sync"
+import "io"
 
 type ResponseCache interface {
 	Get(key string) (Entry, bool)
@@ -26,8 +27,9 @@ func NewMemoryCache() memoryCache {
 func (cache memoryCache) Get(key string) (Entry, bool) {
 	cache.RLock()
 	defer cache.RUnlock()
-	response, ok := cache.Entries[key]
-	return response, ok
+	entry, ok := cache.Entries[key]
+	if ok { entry.Body.Seek(0, io.SeekStart) }
+	return entry, ok
 }
 
 func (cache memoryCache) Set(key string, entry Entry) {
