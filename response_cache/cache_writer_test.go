@@ -102,7 +102,7 @@ func TestCacheWriter(t *testing.T) {
 			cacheWriter.Write(datum)
 			expectedData = append(expectedData, datum...)
 		}
-		cacheWriter.Close()
+		cacheWriter.Finish()
 
 		// check it was all forwarded through to the real HTTP response writer
 		if !reflect.DeepEqual(responseWriter.response, scenario.responseData) {
@@ -119,14 +119,15 @@ func TestCacheWriter(t *testing.T) {
 			t.Error("response was not written to cache")
 		} else {
 			// check it was stored in the cache correctly
-			if entry.Status != scenario.Status {
+			if entry.Status() != scenario.Status {
 				t.Error("cache stored wrong status")
 			}
-			if !reflect.DeepEqual(entry.Header, scenario.Header) {
+			if !reflect.DeepEqual(entry.Header(), scenario.Header) {
 				t.Error("Header was not restored from the cache")
 			}
-			data := make([]byte, entry.Body.Size())
-			_, err := io.ReadFull(entry.Body, data)
+			body := entry.Body()
+			data := make([]byte, body.Size())
+			_, err := io.ReadFull(body, data)
 			if err != nil || !reflect.DeepEqual(data, expectedData) {
 				t.Error("Data was not restored from the cache")
 			}

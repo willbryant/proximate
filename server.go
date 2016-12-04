@@ -57,7 +57,8 @@ func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *ht
 		fmt.Fprintf(os.Stdout, "%s request to %s is cacheable, request hash %s\n", req.Method, req.URL, hash)
 		writer := response_cache.NewResponseCacheWriter(server.Cache, hash, w)
 		server.Proxy.ServeHTTP(writer, req)
-		writer.Close()
+		writer.Finish()
+		// TODO: when/how do we call Abort()?
 	}
 }
 
