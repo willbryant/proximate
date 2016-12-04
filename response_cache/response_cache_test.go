@@ -1,7 +1,7 @@
 package response_cache
 
 import "testing"
-import "io"
+import "bytes"
 import "net/http"
 import "reflect"
 
@@ -32,16 +32,15 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	bodyWriter.Write(dummyData)
 	bodyWriter.Finish()
 
-	retrieved, ok := cache.Get("key2")
-	body := retrieved.Body()
-	data := make([]byte, body.Size())
-	_, err = io.ReadFull(body, data)
+	entry, ok := cache.Get("key2")
 
 	if !ok { t.Error("Cache did not contain written key") }
-	if retrieved.Status() != http.StatusOK { t.Error("Status was not restored from the cache") }
-	if !reflect.DeepEqual(retrieved.Header(), dummyHeader) { t.Error("Header was not restored from the cache") }
-	if body.Size() != int64(len(dummyData)) { t.Error("Data was not the same length in the cache") }
-	if err != nil || !reflect.DeepEqual(data, dummyData) { t.Error("Data was not restored from the cache") }
+	if entry.Status() != http.StatusOK { t.Error("Status was not restored from the cache") }
+	if !reflect.DeepEqual(entry.Header(), dummyHeader) { t.Error("Header was not restored from the cache") }
+
+	buffer := bytes.Buffer{}
+	_, err = buffer.ReadFrom(entry.Body())
+	if err != nil || !reflect.DeepEqual(buffer.Bytes(), dummyData) { t.Error("Data was not restored from the cache") }
 
 	// test other keys are still not present
 	_, ok = cache.Get("key3")

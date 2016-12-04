@@ -3,15 +3,10 @@ package response_cache
 import "io"
 import "net/http"
 
-type ReadSizer interface {
-	io.Reader
-	Size() int64
-}
-
 type Entry interface {
 	Status() int
 	Header() http.Header
-	Body() ReadSizer
+	Body() io.Reader
 	WriteTo(w http.ResponseWriter)
 }
 

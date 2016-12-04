@@ -1,7 +1,8 @@
 package response_cache
 
-import "net/http"
 import "bytes"
+import "io"
+import "net/http"
 import "sync"
 
 type memoryCacheEntry struct {
@@ -18,7 +19,7 @@ func (entry memoryCacheEntry) Header() http.Header {
 	return entry.header;
 }
 
-func (entry memoryCacheEntry) Body() ReadSizer {
+func (entry memoryCacheEntry) Body() io.Reader {
 	return bytes.NewReader(entry.body)
 }
 

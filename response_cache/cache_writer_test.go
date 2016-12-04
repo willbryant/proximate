@@ -1,7 +1,7 @@
 package response_cache
 
 import "testing"
-import "io"
+import "bytes"
 import "fmt"
 import "net/http"
 import "reflect"
@@ -125,10 +125,9 @@ func TestCacheWriter(t *testing.T) {
 			if !reflect.DeepEqual(entry.Header(), scenario.Header) {
 				t.Error("Header was not restored from the cache")
 			}
-			body := entry.Body()
-			data := make([]byte, body.Size())
-			_, err := io.ReadFull(body, data)
-			if err != nil || !reflect.DeepEqual(data, expectedData) {
+			buffer := bytes.Buffer{}
+			_, err := buffer.ReadFrom(entry.Body())
+			if err != nil || !reflect.DeepEqual(buffer.Bytes(), expectedData) {
 				t.Error("Data was not restored from the cache")
 			}
 		}
