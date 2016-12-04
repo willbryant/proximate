@@ -1,8 +1,6 @@
 package response_cache
 
-import "fmt"
 import "net/http"
-import "os"
 
 // intercepts an HTTP response and as well as sending it to the original writer (which belongs to the
 // real client), stores the response in the cache (if it is a 200 OK response).
@@ -34,9 +32,6 @@ func (writer *ResponseCacheWriter) WriteHeader(status int) {
 		// we could of course have returned that from Header() above instead, but then we'd have to do
 		// a header copy even in the !StatusOK case.
 		CopyHeader(writer.entry.Header, writer.original.Header())
-		fmt.Fprintf(os.Stdout, "could enter %s into cache, status was %d\n", writer.key, status)
-	} else {
-		fmt.Fprintf(os.Stdout, "not entering %s into cache, status was %d\n", writer.key, status)
 	}
 
 	writer.original.WriteHeader(status)
@@ -55,6 +50,5 @@ func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
 func (writer *ResponseCacheWriter) Close() {
 	if writer.entry.Status == http.StatusOK {
 		writer.cache.Set(writer.key, writer.entry)
-		fmt.Fprintf(os.Stdout, "entered %s into cache, response body was %d bytes\n", writer.key, len(writer.entry.Body))
 	}
 }
