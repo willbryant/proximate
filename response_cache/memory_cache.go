@@ -2,6 +2,7 @@ package response_cache
 
 import "bytes"
 import "io"
+import "io/ioutil"
 import "net/http"
 import "sync"
 
@@ -19,8 +20,8 @@ func (entry memoryCacheEntry) Header() http.Header {
 	return entry.header;
 }
 
-func (entry memoryCacheEntry) Body() io.Reader {
-	return bytes.NewReader(entry.body)
+func (entry memoryCacheEntry) Body() io.ReadCloser {
+	return ioutil.NopCloser(bytes.NewReader(entry.body))
 }
 
 func (entry memoryCacheEntry) WriteTo(w http.ResponseWriter) {
@@ -32,7 +33,7 @@ type memoryCache struct {
 	Entries map[string]memoryCacheEntry
 }
 
-func NewMemoryCache() memoryCache {
+func NewMemoryCache() ResponseCache {
 	return memoryCache{
 		Entries: make(map[string]memoryCacheEntry),
 	}
