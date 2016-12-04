@@ -9,7 +9,7 @@ import "net/http"
 import "sort"
 
 func digestRequestAndBody(req *http.Request) ([]byte, error) {
-	terminator := [...]byte {0}
+	terminator := [...]byte{0}
 	hasher := sha256.New()
 
 	// hash the method
@@ -39,7 +39,7 @@ func digestRequestAndBody(req *http.Request) ([]byte, error) {
 	// hash the request headers; explicitly sort the headers by name as maps have unordered iteration
 	var keys []string
 	for k := range req.Header {
-	    keys = append(keys, k)
+		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {

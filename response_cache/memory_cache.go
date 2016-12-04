@@ -8,15 +8,15 @@ import "sync"
 type memoryCacheEntry struct {
 	status int
 	header http.Header
-	body []byte
+	body   []byte
 }
 
 func (entry memoryCacheEntry) Status() int {
-	return entry.status;
+	return entry.status
 }
 
 func (entry memoryCacheEntry) Header() http.Header {
-	return entry.header;
+	return entry.header
 }
 
 func (entry memoryCacheEntry) Body() io.Reader {
@@ -51,7 +51,7 @@ func (cache memoryCache) Get(key string) (Entry, bool) {
 
 type memoryCacheBodyWriter struct {
 	cache memoryCache
-	key string
+	key   string
 	entry *memoryCacheEntry
 }
 
@@ -79,7 +79,7 @@ func (cache memoryCache) BeginWrite(key string, status int, header http.Header) 
 
 	return memoryCacheBodyWriter{
 		cache: cache,
-		key: key,
+		key:   key,
 		entry: &entry,
 	}, nil
 }

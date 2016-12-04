@@ -5,16 +5,16 @@ import "net/http"
 // intercepts an HTTP response and as well as sending it to the original writer (which belongs to the
 // real client), stores the response in the cache (if it is a 200 OK response).
 type ResponseCacheWriter struct {
-	cache ResponseCache
-	key string
-	body CacheBodyWriter
+	cache    ResponseCache
+	key      string
+	body     CacheBodyWriter
 	original http.ResponseWriter
 }
 
 func NewResponseCacheWriter(cache ResponseCache, key string, original http.ResponseWriter) *ResponseCacheWriter {
-	return &ResponseCacheWriter {
-		cache: cache,
-		key: key,
+	return &ResponseCacheWriter{
+		cache:    cache,
+		key:      key,
 		original: original,
 	}
 }
