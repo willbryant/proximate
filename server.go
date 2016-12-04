@@ -51,6 +51,7 @@ func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *ht
 	}
 
 	if cacheEntry, ok := server.Cache.Get(hash); ok {
+		defer cacheEntry.Close()
 		fmt.Fprintf(os.Stdout, "%s request to %s is cached, request hash %s\n", req.Method, req.URL, hash)
 		cacheEntry.WriteTo(w)
 	} else {

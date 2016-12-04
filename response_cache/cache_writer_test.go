@@ -111,7 +111,7 @@ func TestCacheWriter(t *testing.T) {
 
 		// check it was stored or not stored in the cache as expected
 		entry, present := cache.Get(cacheKey)
-		if present { defer entry.Body().Close() }
+		if present { defer entry.Close() }
 		if !scenario.ShouldStore {
 			if present {
 				t.Error("response was written to cache when it should not have been")
