@@ -128,8 +128,11 @@ func TestCacheWriter(t *testing.T) {
 			}
 			buffer := bytes.Buffer{}
 			_, err := buffer.ReadFrom(entry.Body())
-			if err != nil || !reflect.DeepEqual(buffer.Bytes(), expectedData) {
-				t.Error("Data was not restored from the cache")
+			if err != nil {
+				t.Error("Data could not be read from the cache: " + err.Error())
+			}
+			if !reflect.DeepEqual(buffer.Bytes(), expectedData) {
+				t.Error("Data was not restored from the cache accurately")
 			}
 		}
 	}

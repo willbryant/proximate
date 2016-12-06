@@ -64,14 +64,16 @@ func (writer memoryCacheBodyWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (writer memoryCacheBodyWriter) Finish() {
+func (writer memoryCacheBodyWriter) Finish() error {
 	writer.cache.RLock()
 	defer writer.cache.RUnlock()
 	writer.cache.Entries[writer.key] = *writer.entry
+	return nil
 }
 
-func (writer memoryCacheBodyWriter) Abort() {
+func (writer memoryCacheBodyWriter) Abort() error {
 	// do nothing
+	return nil
 }
 
 func (cache memoryCache) BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error) {

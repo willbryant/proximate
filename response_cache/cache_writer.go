@@ -1,5 +1,7 @@
 package response_cache
 
+import "fmt"
+import "os"
 import "net/http"
 
 // intercepts an HTTP response and as well as sending it to the original writer (which belongs to the
@@ -28,10 +30,11 @@ func (writer *ResponseCacheWriter) WriteHeader(status int) {
 		// now that we know we're keeping the response, we want to copy the header to the Entry object
 		// we could of course have returned that from Header() above instead, but then we'd have to do
 		// a header copy even in the !StatusOK case.
-		var err error
-		writer.body, err = writer.cache.BeginWrite(writer.key, status, writer.original.Header())
+		body, err := writer.cache.BeginWrite(writer.key, status, writer.original.Header())
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "couldn't start cache store for request hash %s, error %s\n", writer.key, err)
+		} else {
+			writer.body = body
 		}
 	}
 
@@ -48,14 +51,16 @@ func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
 	return len, err
 }
 
-func (writer *ResponseCacheWriter) Finish() {
+func (writer *ResponseCacheWriter) Finish() error {
 	if writer.body != nil {
-		writer.body.Finish()
+		return writer.body.Finish()
 	}
+	return nil
 }
 
-func (writer *ResponseCacheWriter) Abort() {
+func (writer *ResponseCacheWriter) Abort() error {
 	if writer.body != nil {
-		writer.body.Abort()
+		return writer.body.Abort()
 	}
+	return nil
 }

@@ -40,7 +40,8 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 
 	buffer := bytes.Buffer{}
 	_, err = buffer.ReadFrom(entry.Body())
-	if err != nil || !reflect.DeepEqual(buffer.Bytes(), dummyData) { t.Error("Data was not restored from the cache") }
+	if err != nil { t.Error("Data could not be read from the cache: " + err.Error()) }
+	if !reflect.DeepEqual(buffer.Bytes(), dummyData) { t.Error("Data was not restored from the cache accurately") }
 
 	// test other keys are still not present
 	_, err = cache.Get("key3")
@@ -49,5 +50,5 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 
 func TestResponseCacheSetAndGet(t *testing.T) {
 	testCacheSetAndGet(t, NewMemoryCache())
-	testCacheSetAndGet(t, NewDiskCache("test"))
+	testCacheSetAndGet(t, NewDiskCache("test/cache"))
 }

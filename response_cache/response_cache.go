@@ -5,8 +5,8 @@ import "net/http"
 
 type CacheBodyWriter interface {
 	io.Writer
-	Finish()
-	Abort()
+	Finish() error
+	Abort() error
 }
 
 type ResponseCache interface {
