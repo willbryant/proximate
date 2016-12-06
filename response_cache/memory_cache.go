@@ -3,6 +3,7 @@ package response_cache
 import "bytes"
 import "io"
 import "net/http"
+import "os"
 import "sync"
 
 type memoryCacheEntry struct {
@@ -42,11 +43,14 @@ func NewMemoryCache() ResponseCache {
 	}
 }
 
-func (cache memoryCache) Get(key string) (Entry, bool) {
+func (cache memoryCache) Get(key string) (Entry, error) {
 	cache.RLock()
 	defer cache.RUnlock()
 	entry, ok := cache.Entries[key]
-	return entry, ok
+	if ok {
+		return entry, nil
+	}
+	return nil, os.ErrNotExist
 }
 
 type memoryCacheBodyWriter struct {

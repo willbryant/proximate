@@ -10,6 +10,6 @@ type CacheBodyWriter interface {
 }
 
 type ResponseCache interface {
-	Get(key string) (Entry, bool)
+	Get(key string) (Entry, error)
 	BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error)
 }
