@@ -8,8 +8,8 @@ import "os"
 
 type DiskCacheEntry struct {
 	header DiskCacheHeader
-	body io.Reader
-	file io.Closer
+	body   io.Reader
+	file   io.Closer
 }
 
 func (entry DiskCacheEntry) Status() int {
@@ -61,8 +61,8 @@ func (cache diskCache) Get(key string) (Entry, error) {
 
 	return DiskCacheEntry{
 		header: diskCacheHeader,
-		body: streamer,
-		file: file,
+		body:   streamer,
+		file:   file,
 	}, nil
 }
 
@@ -112,8 +112,8 @@ func (writer diskCacheBodyWriter) Abort() error {
 func (cache diskCache) BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error) {
 	diskCacheHeader := DiskCacheHeader{
 		Version: 1,
-		Status: status,
-		Header: header,
+		Status:  status,
+		Header:  header,
 	}
 
 	tempfile, err := ioutil.TempFile(cache.cacheDirectory, "_temp")
