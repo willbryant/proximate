@@ -44,7 +44,13 @@ func (writer *ResponseCacheWriter) WriteHeader(status int) {
 func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
 	// if we're actually caching this response, keep a copy of the data
 	if writer.body != nil {
-		writer.body.Write(data)
+		_, err := writer.body.Write(data)
+		if err != nil {
+			// we can continue sending the response to the client, but we can't store to the cache
+			fmt.Fprintf(os.Stderr, "couldn't write cache data for request hash %s, error %s\n", writer.key, err)
+			writer.body.Abort()
+			writer.body = nil
+		}
 	}
 
 	len, err := writer.original.Write(data)
