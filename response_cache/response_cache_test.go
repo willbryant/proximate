@@ -5,7 +5,7 @@ import "errors"
 import "net/http"
 import "os"
 
-func returnNotExist() error {
+func returnNotExist(writer http.ResponseWriter) error {
 	return os.ErrNotExist
 }
 

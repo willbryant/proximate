@@ -44,28 +44,22 @@ func cachableUploadGitPackRequest(req *http.Request) bool {
 		req.Header.Get("Authorization") == ""
 }
 
-func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *http.Request) {
+func (server proximateServer) serveGitPackRequest(realWriter http.ResponseWriter, req *http.Request) {
 	hash, err := response_cache.HashRequestAndBody(req)
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(realWriter, err.Error(), 401)
 	}
 
-	err = server.Cache.Get(hash, w, func() error {
+	err = server.Cache.Get(hash, realWriter, func(cacheWriter http.ResponseWriter) error {
 		fmt.Fprintf(os.Stdout, "%s request to %s is cacheable, request hash %s\n", req.Method, req.URL, hash)
-		writer := response_cache.NewResponseCacheWriter(server.Cache, hash, w)
-		server.Proxy.ServeHTTP(writer, req)
-		err := writer.Finish()
-		if err != nil {
-			return err
-		}
-		// TODO: when/how do we call Abort()?
-		return os.ErrNotExist
+		server.Proxy.ServeHTTP(cacheWriter, req)
+		return nil // TODO: how do we detect errors from the proxying?
 	})
 
 	if err == nil {
 		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
 	} else if !os.IsNotExist(err) {
-		fmt.Fprintf(os.Stdout, "couldn't check cache for %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
+		fmt.Fprintf(os.Stdout, "error caching %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
 	}
 }
 

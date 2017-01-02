@@ -1,77 +1,63 @@
 package response_cache
 
+import "io"
 import "fmt"
 import "os"
 import "net/http"
 
-// intercepts an HTTP response and as well as sending it to the original writer (which belongs to the
-// real client), stores the response in the cache (if it is a 200 OK response).
+// interface provided by a particular cache store to the ResponseCacheWriter
+type cacheStoreWriter interface {
+	WriteHeader(status int, header http.Header) error
+	io.Writer
+	Finish() error
+	Abort() error
+}
+
+// intercepts an HTTP response and as well as sending it to the original responseWriter (which
+// belongs to the real client), stores the response in the cache (if it is a 200 OK response).
 type ResponseCacheWriter struct {
-	cache    ResponseCache
-	key      string
-	body     CacheWriter
+	cacheEntry cacheStoreWriter
 	original http.ResponseWriter
 }
 
-func NewResponseCacheWriter(cache ResponseCache, key string, original http.ResponseWriter) *ResponseCacheWriter {
+func NewResponseCacheWriter(cacheEntry cacheStoreWriter, original http.ResponseWriter) *ResponseCacheWriter {
 	return &ResponseCacheWriter{
-		cache:    cache,
-		key:      key,
+		cacheEntry: cacheEntry,
 		original: original,
 	}
 }
 
-func (writer *ResponseCacheWriter) Header() http.Header {
-	return writer.original.Header()
+func (w *ResponseCacheWriter) Header() http.Header {
+	return w.original.Header()
 }
 
-func (writer *ResponseCacheWriter) WriteHeader(status int) {
+func (w *ResponseCacheWriter) WriteHeader(status int) {
 	if status == http.StatusOK {
 		// now that we know we're keeping the response, we want to copy the header to the Entry object
 		// we could of course have returned that from Header() above instead, but then we'd have to do
 		// a header copy even in the !StatusOK case.
-		body, err := writer.cache.BeginWrite(writer.key)
+		err := w.cacheEntry.WriteHeader(status, w.original.Header())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "couldn't start cache store for request hash %s, error %s\n", writer.key, err)
-		} else {
-			err = body.WriteHeader(status, writer.original.Header())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "couldn't write cache headers for request hash %s, error %s\n", writer.key, err)
-			} else {
-				writer.body = body
-			}
+			fmt.Fprintf(os.Stderr, "couldn't write cache headers, error %s\n", err)
+			w.cacheEntry.Abort()
 		}
+	} else {
+		// this is fine, but we don't cache non-OK responses, so abort the cache write
+		w.cacheEntry.Abort()
 	}
 
-	writer.original.WriteHeader(status)
+	w.original.WriteHeader(status)
 }
 
-func (writer *ResponseCacheWriter) Write(data []byte) (int, error) {
+func (w *ResponseCacheWriter) Write(data []byte) (int, error) {
 	// if we're actually caching this response, keep a copy of the data
-	if writer.body != nil {
-		_, err := writer.body.Write(data)
-		if err != nil {
-			// we can continue sending the response to the client, but we can't store to the cache
-			fmt.Fprintf(os.Stderr, "couldn't write cache data for request hash %s, error %s\n", writer.key, err)
-			writer.body.Abort()
-			writer.body = nil
-		}
+	_, err := w.cacheEntry.Write(data)
+	if err != nil {
+		// we can continue sending the response to the client, but we can't store to the cache
+		fmt.Fprintf(os.Stderr, "couldn't write cache data, error %s\n", err)
+		w.cacheEntry.Abort()
 	}
 
-	len, err := writer.original.Write(data)
+	len, err := w.original.Write(data)
 	return len, err
-}
-
-func (writer *ResponseCacheWriter) Finish() error {
-	if writer.body != nil {
-		return writer.body.Finish()
-	}
-	return nil
-}
-
-func (writer *ResponseCacheWriter) Abort() error {
-	if writer.body != nil {
-		return writer.body.Abort()
-	}
-	return nil
 }

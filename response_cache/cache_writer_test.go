@@ -127,24 +127,26 @@ func TestCacheWriter(t *testing.T) {
 		cache := NewMemoryCache()
 		cacheKey := fmt.Sprintf("cache_key_%d", index)
 		responseWriter := newDummyResponseWriter(t)
-		cacheWriter := NewResponseCacheWriter(cache, cacheKey, responseWriter)
 
 		// write the scenario to the cache adapter
-		CopyHeader(cacheWriter.Header(), scenario.Header)
-		cacheWriter.WriteHeader(scenario.Status)
-		expectedData := make([]byte, 0)
-		for _, datum := range scenario.Data {
-			cacheWriter.Write(datum)
-			expectedData = append(expectedData, datum...)
+		err := cache.Get(cacheKey, responseWriter, func(writer http.ResponseWriter) error {
+			scenario.copyResponseTo(writer)
+			return nil
+		})
+		if !os.IsNotExist(err) {
+			t.Error("request callback wasn't called")
 		}
-		cacheWriter.Finish()
 
 		// check it was all forwarded through to the real HTTP response writer
+		expectedData := make([]byte, 0)
+		for _, datum := range scenario.Data {
+			expectedData = append(expectedData, datum...)
+		}
 		testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
 
 		// check it was stored or not stored in the cache as expected
 		responseWriter = newDummyResponseWriter(t)
-		err := cache.Get(cacheKey, responseWriter, func() error {
+		err = cache.Get(cacheKey, responseWriter, func(writer http.ResponseWriter) error {
 			return os.ErrNotExist
 		})
 		if !scenario.ShouldStore {
@@ -152,7 +154,11 @@ func TestCacheWriter(t *testing.T) {
 				t.Error("response was written to cache when it should not have been")
 			}
 		} else if err != nil {
-			t.Error("response was not written to cache")
+			if os.IsNotExist(err) {
+				t.Error("response was not written to cache")
+			} else {
+				t.Error("couldn't read response from cache: " + err.Error())
+			}
 		} else {
 			// check it was stored in the cache correctly
 			testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
