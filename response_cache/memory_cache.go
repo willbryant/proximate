@@ -31,16 +31,16 @@ func (cache memoryCache) Get(key string, realWriter http.ResponseWriter, miss fu
 	}
 
 	cacheWriter := memoryCacheWriter{
-		cache: cache,
-		key:   key,
-		entry: &memoryCacheEntry{},
+		entry: memoryCacheEntry{
+			header: make(http.Header),
+		},
+		realWriter: realWriter,
 	}
-	responseWriter := NewResponseCacheWriter(&cacheWriter, realWriter)
-	if err := miss(responseWriter); err != nil {
+	if err := miss(&cacheWriter); err != nil {
 		cacheWriter.Abort()
 		return err
 	}
-	if err := cacheWriter.Finish(); err != nil {
+	if err := cacheWriter.Finish(cache, key); err != nil {
 		return err
 	}
 	return os.ErrNotExist // indicates a cache miss
@@ -54,26 +54,35 @@ func (cache memoryCache) ServeCacheHit(w http.ResponseWriter, entry memoryCacheE
 }
 
 type memoryCacheWriter struct {
-	cache memoryCache
-	key   string
-	entry *memoryCacheEntry
+	entry memoryCacheEntry
+	realWriter http.ResponseWriter
 }
 
-func (writer *memoryCacheWriter) WriteHeader(status int, header http.Header) error {
+func (writer *memoryCacheWriter) Header() http.Header {
+	return writer.entry.header
+}
+
+func (writer *memoryCacheWriter) WriteHeader(status int) {
+	CopyHeader(writer.realWriter.Header(), writer.Header())
+	writer.realWriter.WriteHeader(status)
+
 	if writer.Aborted() {
-		return nil
+		return
+	}
+
+	if !CacheableResponse(status, writer.Header()) {
+		writer.Uncacheable()
+		return
 	}
 
 	writer.entry.status = status
-	writer.entry.header = make(http.Header)
-	CopyHeader(writer.entry.header, header)
-
-	return nil
 }
 
 func (writer *memoryCacheWriter) Write(data []byte) (int, error) {
+	n, err := writer.realWriter.Write(data)
+
 	if writer.Aborted() {
-		return 0, nil
+		return n, err
 	}
 
 	writer.entry.body = append(writer.entry.body, data...)
@@ -81,22 +90,26 @@ func (writer *memoryCacheWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (writer *memoryCacheWriter) Finish() error {
+func (writer *memoryCacheWriter) Finish(cache memoryCache, key string) error {
 	if writer.Aborted() {
 		return nil
 	}
 
-	writer.cache.RLock()
-	defer writer.cache.RUnlock()
-	writer.cache.Entries[writer.key] = *writer.entry
+	cache.RLock()
+	defer cache.RUnlock()
+	cache.Entries[key] = writer.entry
 	return nil
 }
 
 func (writer *memoryCacheWriter) Abort() error {
-	writer.entry = nil
+	writer.entry.status = -1
 	return nil
 }
 
+func (writer *memoryCacheWriter) Uncacheable() error {
+	return writer.Abort()
+}
+
 func (writer *memoryCacheWriter) Aborted() bool {
-	return (writer.entry == nil)
+	return (writer.entry.status == -1)
 }

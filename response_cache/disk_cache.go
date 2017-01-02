@@ -1,5 +1,6 @@
 package response_cache
 
+import "fmt"
 import "io"
 import "io/ioutil"
 import "github.com/tinylib/msgp/msgp"
@@ -39,16 +40,15 @@ func (cache diskCache) Get(key string, realWriter http.ResponseWriter, miss func
 	}
 
 	cacheWriter := diskCacheWriter{
-		cache:    cache,
-		key:      key,
 		tempfile: tempfile,
+		header: make(http.Header),
+		realWriter: realWriter,
 	}
-	responseWriter := NewResponseCacheWriter(&cacheWriter, realWriter)
-	if err := miss(responseWriter); err != nil {
-		cacheWriter.Abort()
+	if err := miss(&cacheWriter); err != nil {
+		cacheWriter.Abort(nil)
 		return err
 	}
-	if err := cacheWriter.Finish(); err != nil {
+	if err := cacheWriter.Finish(cache.cacheEntryPath(key)); err != nil {
 		return err
 	}
 	return os.ErrNotExist // indicates a cache miss
@@ -70,44 +70,62 @@ func (cache diskCache) ServeCacheHit(w http.ResponseWriter, file *os.File) error
 }
 
 type diskCacheWriter struct {
-	cache    diskCache
-	key      string
 	tempfile *os.File
+	header http.Header
+	realWriter http.ResponseWriter
 }
 
-func (writer *diskCacheWriter) WriteHeader(status int, header http.Header) error {
+func (writer *diskCacheWriter) Header() http.Header {
+	return writer.header
+}
+
+func (writer *diskCacheWriter) WriteHeader(status int) {
+	CopyHeader(writer.realWriter.Header(), writer.Header())
+	writer.realWriter.WriteHeader(status)
+
 	if writer.Aborted() {
-		return nil
+		return
+	}
+
+	if !CacheableResponse(status, writer.Header()) {
+		writer.Uncacheable()
+		return
 	}
 
 	diskCacheHeader := DiskCacheHeader{
 		Version: 1,
 		Status:  status,
-		Header:  header,
+		Header:  writer.header,
 	}
 
 	streamer := msgp.NewWriter(writer.tempfile)
 
 	if err := diskCacheHeader.EncodeMsg(streamer); err != nil {
-		return err
+		writer.Abort(err)
+		return
 	}
 
 	if err := streamer.Flush(); err != nil {
-		return err
+		writer.Abort(err)
+		return
 	}
-
-	return nil
 }
 
 func (writer *diskCacheWriter) Write(data []byte) (int, error) {
+	n, err := writer.realWriter.Write(data)
+
 	if writer.Aborted() {
-		return 0, nil
+		return n, err
 	}
 
-	return writer.tempfile.Write(data)
+	n, err = writer.tempfile.Write(data)
+	if err != nil {
+		writer.Abort(err)
+	}
+	return n, err
 }
 
-func (writer *diskCacheWriter) Finish() error {
+func (writer *diskCacheWriter) Finish(path string) error {
 	if writer.Aborted() {
 		return nil
 	}
@@ -116,7 +134,7 @@ func (writer *diskCacheWriter) Finish() error {
 		return err
 	}
 
-	if err := os.Link(writer.tempfile.Name(), writer.cache.cacheEntryPath(writer.key)); err != nil {
+	if err := os.Link(writer.tempfile.Name(), path); err != nil {
 		return err
 	}
 
@@ -127,7 +145,11 @@ func (writer *diskCacheWriter) Finish() error {
 	return nil
 }
 
-func (writer *diskCacheWriter) Abort() error {
+func (writer *diskCacheWriter) Abort(reason error) error {
+	if reason != nil {
+		fmt.Fprintf(os.Stderr, "error writing to cache: %s\n", reason)
+	}
+
 	if err := writer.tempfile.Close(); err != nil {
 		return err
 	}
@@ -139,6 +161,10 @@ func (writer *diskCacheWriter) Abort() error {
 	writer.tempfile = nil
 
 	return nil
+}
+
+func (writer *diskCacheWriter) Uncacheable() error {
+	return writer.Abort(nil)
 }
 
 func (writer *diskCacheWriter) Aborted() bool {

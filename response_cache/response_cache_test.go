@@ -78,7 +78,10 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	if err == nil { t.Error("Cache should not contain key not finished") }
 }
 
-func TestResponseCacheSetAndGet(t *testing.T) {
+func TestMemoryCacheSetAndGet(t *testing.T) {
 	testCacheSetAndGet(t, NewMemoryCache())
+}
+
+func TestDiskCacheSetAndGet(t *testing.T) {
 	testCacheSetAndGet(t, NewDiskCache("test/cache"))
 }

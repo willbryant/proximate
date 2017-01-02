@@ -146,12 +146,17 @@ func TestCacheWriter(t *testing.T) {
 
 		// check it was stored or not stored in the cache as expected
 		responseWriter = newDummyResponseWriter(t)
+		var missed = false
 		err = cache.Get(cacheKey, responseWriter, func(writer http.ResponseWriter) error {
-			return os.ErrNotExist
+			missed = true
+			return nil
 		})
 		if !scenario.ShouldStore {
-			if err == nil {
-				t.Error("response was written to cache when it should not have been")
+			if !os.IsNotExist(err) {
+				t.Error("couldn't perform cache miss: " + err.Error())
+			}
+			if !missed {
+				t.Error("response cached when it should not have been")
 			}
 		} else if err != nil {
 			if os.IsNotExist(err) {
