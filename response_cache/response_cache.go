@@ -3,7 +3,8 @@ package response_cache
 import "io"
 import "net/http"
 
-type CacheBodyWriter interface {
+type CacheWriter interface {
+	WriteHeader(status int, header http.Header) error
 	io.Writer
 	Finish() error
 	Abort() error
@@ -11,5 +12,5 @@ type CacheBodyWriter interface {
 
 type ResponseCache interface {
 	Get(key string) (Entry, error)
-	BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error)
+	BeginWrite(key string) (CacheWriter, error)
 }

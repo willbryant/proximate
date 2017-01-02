@@ -9,7 +9,7 @@ import "net/http"
 type ResponseCacheWriter struct {
 	cache    ResponseCache
 	key      string
-	body     CacheBodyWriter
+	body     CacheWriter
 	original http.ResponseWriter
 }
 
@@ -30,11 +30,16 @@ func (writer *ResponseCacheWriter) WriteHeader(status int) {
 		// now that we know we're keeping the response, we want to copy the header to the Entry object
 		// we could of course have returned that from Header() above instead, but then we'd have to do
 		// a header copy even in the !StatusOK case.
-		body, err := writer.cache.BeginWrite(writer.key, status, writer.original.Header())
+		body, err := writer.cache.BeginWrite(writer.key)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "couldn't start cache store for request hash %s, error %s\n", writer.key, err)
 		} else {
-			writer.body = body
+			err = body.WriteHeader(status, writer.original.Header())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "couldn't write cache headers for request hash %s, error %s\n", writer.key, err)
+			} else {
+				writer.body = body
+			}
 		}
 	}
 

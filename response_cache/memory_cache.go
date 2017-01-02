@@ -53,39 +53,42 @@ func (cache memoryCache) Get(key string) (Entry, error) {
 	return nil, os.ErrNotExist
 }
 
-type memoryCacheBodyWriter struct {
+type memoryCacheWriter struct {
 	cache memoryCache
 	key   string
 	entry *memoryCacheEntry
 }
 
-func (writer memoryCacheBodyWriter) Write(data []byte) (int, error) {
+func (writer memoryCacheWriter) WriteHeader(status int, header http.Header) error {
+	writer.entry.status = status
+
+	writer.entry.header = make(http.Header)
+	CopyHeader(writer.entry.Header(), header)
+
+	return nil
+}
+
+func (writer memoryCacheWriter) Write(data []byte) (int, error) {
 	writer.entry.body = append(writer.entry.body, data...)
 	return len(data), nil
 }
 
-func (writer memoryCacheBodyWriter) Finish() error {
+func (writer memoryCacheWriter) Finish() error {
 	writer.cache.RLock()
 	defer writer.cache.RUnlock()
 	writer.cache.Entries[writer.key] = *writer.entry
 	return nil
 }
 
-func (writer memoryCacheBodyWriter) Abort() error {
+func (writer memoryCacheWriter) Abort() error {
 	// do nothing
 	return nil
 }
 
-func (cache memoryCache) BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error) {
-	entry := memoryCacheEntry{
-		status: status,
-		header: make(http.Header),
-	}
-	CopyHeader(entry.Header(), header)
-
-	return memoryCacheBodyWriter{
+func (cache memoryCache) BeginWrite(key string) (CacheWriter, error) {
+	return memoryCacheWriter{
 		cache: cache,
 		key:   key,
-		entry: &entry,
+		entry: &memoryCacheEntry{},
 	}, nil
 }

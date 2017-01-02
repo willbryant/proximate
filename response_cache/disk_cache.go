@@ -66,74 +66,71 @@ func (cache diskCache) Get(key string) (Entry, error) {
 	}, nil
 }
 
-type diskCacheBodyWriter struct {
+type diskCacheWriter struct {
 	cache    diskCache
 	key      string
 	tempfile *os.File
 }
 
-func (writer diskCacheBodyWriter) Write(data []byte) (int, error) {
-	return writer.tempfile.Write(data)
-}
-
-func (writer diskCacheBodyWriter) Finish() error {
-	err := writer.tempfile.Close()
-	if err != nil {
-		return err
-	}
-
-	err = os.Link(writer.tempfile.Name(), writer.cache.cacheEntryPath(writer.key))
-	if err != nil {
-		return err
-	}
-
-	os.Remove(writer.tempfile.Name())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (writer diskCacheBodyWriter) Abort() error {
-	err := writer.tempfile.Close()
-	if err != nil {
-		return err
-	}
-
-	os.Remove(writer.tempfile.Name())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (cache diskCache) BeginWrite(key string, status int, header http.Header) (CacheBodyWriter, error) {
+func (writer diskCacheWriter) WriteHeader(status int, header http.Header) error {
 	diskCacheHeader := DiskCacheHeader{
 		Version: 1,
 		Status:  status,
 		Header:  header,
 	}
 
+	streamer := msgp.NewWriter(writer.tempfile)
+
+	if err := diskCacheHeader.EncodeMsg(streamer); err != nil {
+		return err
+	}
+
+	if err := streamer.Flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (writer diskCacheWriter) Write(data []byte) (int, error) {
+	return writer.tempfile.Write(data)
+}
+
+func (writer diskCacheWriter) Finish() error {
+	if err := writer.tempfile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Link(writer.tempfile.Name(), writer.cache.cacheEntryPath(writer.key)); err != nil {
+		return err
+	}
+
+	if err := os.Remove(writer.tempfile.Name()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (writer diskCacheWriter) Abort() error {
+	if err := writer.tempfile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Remove(writer.tempfile.Name()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cache diskCache) BeginWrite(key string) (CacheWriter, error) {
 	tempfile, err := ioutil.TempFile(cache.cacheDirectory, "_temp")
 	if err != nil {
 		return nil, err
 	}
 
-	streamer := msgp.NewWriter(tempfile)
-
-	err = diskCacheHeader.EncodeMsg(streamer)
-	if err != nil {
-		return nil, err
-	}
-
-	err = streamer.Flush()
-	if err != nil {
-		return nil, err
-	}
-
-	return diskCacheBodyWriter{
+	return diskCacheWriter{
 		cache:    cache,
 		key:      key,
 		tempfile: tempfile,

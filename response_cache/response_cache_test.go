@@ -11,26 +11,43 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	dummyHeader.Add("Content-Type", "text/html")
 	dummyData := []byte("Test response body\x00test.")
 
-	// test starting but not finishing a write
-	bodyWriter, err := cache.BeginWrite("key1", http.StatusOK, dummyHeader)
+	// test opening but not starting a write
+	writer, err := cache.BeginWrite("key1")
 	if err != nil { panic(err) }
 
 	_, err = cache.Get("key1")
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	bodyWriter.Write(dummyData)
+	writer.Write(dummyData)
 	_, err = cache.Get("key1")
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	bodyWriter.Abort()
+	writer.Abort()
+	_, err = cache.Get("key1")
+	if err == nil { t.Error("Cache should not contain key not finished") }
+
+	// test starting but not finishing a write
+	writer, err = cache.BeginWrite("key1")
+	writer.WriteHeader(http.StatusOK, dummyHeader)
+	if err != nil { panic(err) }
+
+	_, err = cache.Get("key1")
+	if err == nil { t.Error("Cache should not contain key not finished") }
+
+	writer.Write(dummyData)
+	_, err = cache.Get("key1")
+	if err == nil { t.Error("Cache should not contain key not finished") }
+
+	writer.Abort()
 	_, err = cache.Get("key1")
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test an actual write
-	bodyWriter, err = cache.BeginWrite("key2", http.StatusOK, dummyHeader)
+	writer, err = cache.BeginWrite("key2")
+	writer.WriteHeader(http.StatusOK, dummyHeader)
 	if err != nil { panic(err) }
-	bodyWriter.Write(dummyData)
-	bodyWriter.Finish()
+	writer.Write(dummyData)
+	writer.Finish()
 
 	entry, err := cache.Get("key2")
 
