@@ -50,12 +50,7 @@ func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *ht
 		http.Error(w, err.Error(), 401)
 	}
 
-	if cacheEntry, err := server.Cache.Get(hash); err == nil {
-		defer cacheEntry.Close()
-		fmt.Fprintf(os.Stdout, "%s request to %s is cached, request hash %s\n", req.Method, req.URL, hash)
-		cacheEntry.WriteTo(w)
-
-	} else if os.IsNotExist(err) {
+	cacheEntry, err := server.Cache.Get(hash, func() error {
 		fmt.Fprintf(os.Stdout, "%s request to %s is cacheable, request hash %s\n", req.Method, req.URL, hash)
 		writer := response_cache.NewResponseCacheWriter(server.Cache, hash, w)
 		server.Proxy.ServeHTTP(writer, req)
@@ -64,8 +59,15 @@ func (server proximateServer) serveGitPackRequest(w http.ResponseWriter, req *ht
 			fmt.Fprintf(os.Stderr, "couldn't finish cache store for %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
 		}
 		// TODO: when/how do we call Abort()?
+		return os.ErrNotExist
+	})
 
-	} else {
+	if err == nil {
+		defer cacheEntry.Close()
+		fmt.Fprintf(os.Stdout, "%s request to %s is cached, request hash %s\n", req.Method, req.URL, hash)
+		cacheEntry.WriteTo(w)
+
+	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stdout, "couldn't check cache for %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
 		server.Proxy.ServeHTTP(w, req)
 	}

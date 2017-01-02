@@ -4,6 +4,7 @@ import "testing"
 import "bytes"
 import "fmt"
 import "net/http"
+import "os"
 import "reflect"
 
 type responseData struct {
@@ -110,7 +111,9 @@ func TestCacheWriter(t *testing.T) {
 		}
 
 		// check it was stored or not stored in the cache as expected
-		entry, err := cache.Get(cacheKey)
+		entry, err := cache.Get(cacheKey, func() error {
+			return os.ErrNotExist
+		})
 		if entry != nil { defer entry.Close() }
 		if !scenario.ShouldStore {
 			if err == nil {

@@ -48,9 +48,11 @@ func (cache diskCache) cacheEntryPath(key string) string {
 	return cache.cacheDirectory + "/" + key
 }
 
-func (cache diskCache) Get(key string) (Entry, error) {
+func (cache diskCache) Get(key string, miss func() error) (Entry, error) {
 	file, err := os.Open(cache.cacheEntryPath(key))
-	if err != nil {
+	if os.IsNotExist(err) {
+		return nil, miss()
+	} else if err != nil {
 		return nil, err
 	}
 

@@ -3,7 +3,12 @@ package response_cache
 import "testing"
 import "bytes"
 import "net/http"
+import "os"
 import "reflect"
+
+func returnNotExist() error {
+	return os.ErrNotExist
+}
 
 func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	dummyHeader := make(http.Header)
@@ -15,15 +20,15 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	writer, err := cache.BeginWrite("key1")
 	if err != nil { panic(err) }
 
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	writer.Write(dummyData)
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	writer.Abort()
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test starting but not finishing a write
@@ -31,15 +36,15 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	writer.WriteHeader(http.StatusOK, dummyHeader)
 	if err != nil { panic(err) }
 
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	writer.Write(dummyData)
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	writer.Abort()
-	_, err = cache.Get("key1")
+	_, err = cache.Get("key1", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test an actual write
@@ -49,7 +54,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	writer.Write(dummyData)
 	writer.Finish()
 
-	entry, err := cache.Get("key2")
+	entry, err := cache.Get("key2", returnNotExist)
 
 	if err != nil { t.Error("Cache did not contain written key") }
 	if entry.Status() != http.StatusOK { t.Error("Status was not restored from the cache") }
@@ -61,7 +66,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	if !reflect.DeepEqual(buffer.Bytes(), dummyData) { t.Error("Data was not restored from the cache accurately") }
 
 	// test other keys are still not present
-	_, err = cache.Get("key3")
+	_, err = cache.Get("key3", returnNotExist)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 }
 

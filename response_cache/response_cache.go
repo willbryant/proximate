@@ -11,6 +11,6 @@ type CacheWriter interface {
 }
 
 type ResponseCache interface {
-	Get(key string) (Entry, error)
+	Get(key string, miss func() error) (Entry, error)
 	BeginWrite(key string) (CacheWriter, error)
 }
