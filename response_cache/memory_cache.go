@@ -1,7 +1,5 @@
 package response_cache
 
-import "bytes"
-import "io"
 import "net/http"
 import "sync"
 
@@ -9,26 +7,6 @@ type memoryCacheEntry struct {
 	status int
 	header http.Header
 	body   []byte
-}
-
-func (entry memoryCacheEntry) Status() int {
-	return entry.status
-}
-
-func (entry memoryCacheEntry) Header() http.Header {
-	return entry.header
-}
-
-func (entry memoryCacheEntry) Body() io.Reader {
-	return bytes.NewReader(entry.body)
-}
-
-func (entry memoryCacheEntry) Close() {
-	// do nothing
-}
-
-func (entry memoryCacheEntry) WriteTo(w http.ResponseWriter) {
-	WriteEntryTo(entry, w)
 }
 
 type memoryCache struct {
@@ -42,14 +20,18 @@ func NewMemoryCache() ResponseCache {
 	}
 }
 
-func (cache memoryCache) Get(key string, miss func() error) (Entry, error) {
+func (cache memoryCache) Get(key string, w http.ResponseWriter, miss func() error) error {
 	cache.RLock()
 	defer cache.RUnlock()
 	entry, ok := cache.Entries[key]
-	if ok {
-		return entry, nil
+	if !ok {
+		return miss()
 	}
-	return nil, miss()
+
+	CopyHeader(w.Header(), entry.header)
+	w.WriteHeader(entry.status)
+	w.Write(entry.body)
+	return nil
 }
 
 type memoryCacheWriter struct {
@@ -58,34 +40,36 @@ type memoryCacheWriter struct {
 	entry *memoryCacheEntry
 }
 
-func (writer memoryCacheWriter) WriteHeader(status int, header http.Header) error {
-	writer.entry.status = status
+func (writer *memoryCacheWriter) WriteHeader(status int, header http.Header) error {
+	writer.entry = &memoryCacheEntry{
+		status: status,
+		header: make(http.Header),
+	}
 
-	writer.entry.header = make(http.Header)
-	CopyHeader(writer.entry.Header(), header)
+	CopyHeader(writer.entry.header, header)
 
 	return nil
 }
 
-func (writer memoryCacheWriter) Write(data []byte) (int, error) {
+func (writer *memoryCacheWriter) Write(data []byte) (int, error) {
 	writer.entry.body = append(writer.entry.body, data...)
 	return len(data), nil
 }
 
-func (writer memoryCacheWriter) Finish() error {
+func (writer *memoryCacheWriter) Finish() error {
 	writer.cache.RLock()
 	defer writer.cache.RUnlock()
 	writer.cache.Entries[writer.key] = *writer.entry
 	return nil
 }
 
-func (writer memoryCacheWriter) Abort() error {
+func (writer *memoryCacheWriter) Abort() error {
 	// do nothing
 	return nil
 }
 
 func (cache memoryCache) BeginWrite(key string) (CacheWriter, error) {
-	return memoryCacheWriter{
+	return &memoryCacheWriter{
 		cache: cache,
 		key:   key,
 		entry: &memoryCacheEntry{},

@@ -6,34 +6,6 @@ import "github.com/tinylib/msgp/msgp"
 import "net/http"
 import "os"
 
-type DiskCacheEntry struct {
-	header DiskCacheHeader
-	body   io.Reader
-	file   io.Closer
-}
-
-func (entry DiskCacheEntry) Status() int {
-	return entry.header.Status
-}
-
-func (entry DiskCacheEntry) Header() http.Header {
-	return entry.header.Header
-}
-
-func (entry DiskCacheEntry) Body() io.Reader {
-	return entry.body
-}
-
-func (entry DiskCacheEntry) Close() {
-	if entry.file != nil {
-		entry.file.Close()
-	}
-}
-
-func (entry DiskCacheEntry) WriteTo(w http.ResponseWriter) {
-	WriteEntryTo(entry, w)
-}
-
 type diskCache struct {
 	cacheDirectory string
 }
@@ -48,24 +20,24 @@ func (cache diskCache) cacheEntryPath(key string) string {
 	return cache.cacheDirectory + "/" + key
 }
 
-func (cache diskCache) Get(key string, miss func() error) (Entry, error) {
+func (cache diskCache) Get(key string, w http.ResponseWriter, miss func() error) error {
 	file, err := os.Open(cache.cacheEntryPath(key))
 	if os.IsNotExist(err) {
-		return nil, miss()
+		return miss()
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 
+	defer file.Close()
 	streamer := msgp.NewReader(file)
 
 	var diskCacheHeader DiskCacheHeader
 	diskCacheHeader.DecodeMsg(streamer)
 
-	return DiskCacheEntry{
-		header: diskCacheHeader,
-		body:   streamer,
-		file:   file,
-	}, nil
+	CopyHeader(w.Header(), diskCacheHeader.Header)
+	w.WriteHeader(diskCacheHeader.Status)
+	io.Copy(w, streamer)
+	return nil
 }
 
 type diskCacheWriter struct {

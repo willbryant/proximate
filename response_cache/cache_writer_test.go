@@ -1,7 +1,6 @@
 package response_cache
 
 import "testing"
-import "bytes"
 import "fmt"
 import "net/http"
 import "os"
@@ -13,8 +12,20 @@ type responseData struct {
 	Data   [][]byte
 }
 
+func (responseData responseData) copyResponseTo(writer http.ResponseWriter) error {
+	CopyHeader(writer.Header(), responseData.Header)
+	writer.WriteHeader(responseData.Status)
+	for _, datum := range responseData.Data {
+		if _, err := writer.Write(datum); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type dummyResponseWriter struct {
 	response responseData
+	t *testing.T
 }
 
 func (responseWriter *dummyResponseWriter) Header() http.Header {
@@ -22,21 +33,44 @@ func (responseWriter *dummyResponseWriter) Header() http.Header {
 }
 
 func (responseWriter *dummyResponseWriter) WriteHeader(status int) {
+	if responseWriter.response.Status != 0 {
+		responseWriter.t.Error("header was already written")
+	}
 	responseWriter.response.Status = status
 }
 
 func (responseWriter *dummyResponseWriter) Write(data []byte) (int, error) {
+	if responseWriter.response.Status == 0 {
+		responseWriter.t.Error("header has not been written yet")
+	}
 	responseWriter.response.Data = append(responseWriter.response.Data, data)
 	return len(data), nil
 }
 
-func newDummyResponseWriter() *dummyResponseWriter {
+func newDummyResponseWriter(t *testing.T) *dummyResponseWriter {
 	responseWriter := &dummyResponseWriter{
 		response: responseData{
 			Header: make(http.Header),
 		},
+		t: t,
 	}
 	return responseWriter
+}
+
+func testResponse(t *testing.T, response responseData, expectedStatus int, expectedHeader http.Header, expectedData []byte) {
+	if response.Status != expectedStatus {
+		t.Error("cache stored wrong status")
+	}
+	if !reflect.DeepEqual(response.Header, expectedHeader) {
+		t.Error("Header was not restored from the cache")
+	}
+	responseData := make([]byte, 0)
+	for _, datum := range response.Data {
+		responseData = append(responseData, datum...)
+	}
+	if !reflect.DeepEqual(responseData, expectedData) {
+		t.Error("Data was not restored from the cache accurately")
+	}
 }
 
 type cacheWriterTestScenario struct {
@@ -92,7 +126,7 @@ func TestCacheWriter(t *testing.T) {
 	for index, scenario := range scenarios {
 		cache := NewMemoryCache()
 		cacheKey := fmt.Sprintf("cache_key_%d", index)
-		responseWriter := newDummyResponseWriter()
+		responseWriter := newDummyResponseWriter(t)
 		cacheWriter := NewResponseCacheWriter(cache, cacheKey, responseWriter)
 
 		// write the scenario to the cache adapter
@@ -106,15 +140,13 @@ func TestCacheWriter(t *testing.T) {
 		cacheWriter.Finish()
 
 		// check it was all forwarded through to the real HTTP response writer
-		if !reflect.DeepEqual(responseWriter.response, scenario.responseData) {
-			t.Error("response was not writer through correctly")
-		}
+		testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
 
 		// check it was stored or not stored in the cache as expected
-		entry, err := cache.Get(cacheKey, func() error {
+		responseWriter = newDummyResponseWriter(t)
+		err := cache.Get(cacheKey, responseWriter, func() error {
 			return os.ErrNotExist
 		})
-		if entry != nil { defer entry.Close() }
 		if !scenario.ShouldStore {
 			if err == nil {
 				t.Error("response was written to cache when it should not have been")
@@ -123,20 +155,7 @@ func TestCacheWriter(t *testing.T) {
 			t.Error("response was not written to cache")
 		} else {
 			// check it was stored in the cache correctly
-			if entry.Status() != scenario.Status {
-				t.Error("cache stored wrong status")
-			}
-			if !reflect.DeepEqual(entry.Header(), scenario.Header) {
-				t.Error("Header was not restored from the cache")
-			}
-			buffer := bytes.Buffer{}
-			_, err := buffer.ReadFrom(entry.Body())
-			if err != nil {
-				t.Error("Data could not be read from the cache: " + err.Error())
-			}
-			if !reflect.DeepEqual(buffer.Bytes(), expectedData) {
-				t.Error("Data was not restored from the cache accurately")
-			}
+			testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
 		}
 	}
 }
