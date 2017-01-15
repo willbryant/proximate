@@ -16,12 +16,12 @@ type memoryCache struct {
 }
 
 func NewMemoryCache() ResponseCache {
-	return memoryCache{
+	return &memoryCache{
 		Entries: make(map[string]memoryCacheEntry),
 	}
 }
 
-func (cache memoryCache) Get(key string, realWriter http.ResponseWriter, miss func(writer http.ResponseWriter) error) error {
+func (cache *memoryCache) Get(key string, realWriter http.ResponseWriter, miss func(writer http.ResponseWriter) error) error {
 	cache.RLock()
 	entry, ok := cache.Entries[key]
 	cache.RUnlock()
@@ -46,7 +46,7 @@ func (cache memoryCache) Get(key string, realWriter http.ResponseWriter, miss fu
 	return os.ErrNotExist // indicates a cache miss
 }
 
-func (cache memoryCache) ServeCacheHit(w http.ResponseWriter, entry memoryCacheEntry) error {
+func (cache *memoryCache) ServeCacheHit(w http.ResponseWriter, entry memoryCacheEntry) error {
 	CopyHeader(w.Header(), entry.header)
 	w.WriteHeader(entry.status)
 	_, err := w.Write(entry.body)
@@ -90,7 +90,7 @@ func (writer *memoryCacheWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (writer *memoryCacheWriter) Finish(cache memoryCache, key string) error {
+func (writer *memoryCacheWriter) Finish(cache *memoryCache, key string) error {
 	if writer.Aborted() {
 		return nil
 	}
