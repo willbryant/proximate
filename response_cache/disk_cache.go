@@ -1,5 +1,6 @@
 package response_cache
 
+import "errors"
 import "fmt"
 import "io"
 import "io/ioutil"
@@ -22,42 +23,65 @@ func (cache diskCache) cacheEntryPath(key string) string {
 }
 
 func (cache diskCache) Get(key string, realWriter http.ResponseWriter, miss func(writer http.ResponseWriter) error) error {
-	file, err := os.Open(cache.cacheEntryPath(key))
+	path := cache.cacheEntryPath(key)
+	file, err := os.Open(path)
 
 	if err == nil {
-		return cache.ServeCacheHit(realWriter, file)
+		return cache.serveFromCache(realWriter, file)
 	}
 
 	if !os.IsNotExist(err) {
 		return err
 	}
 
-	// cache miss
+	// cache miss; open a new tempfile to write to
 	tempfile, err := ioutil.TempFile(cache.cacheDirectory, "_temp")
 	if err != nil {
 		miss(realWriter)
 		return err
 	}
 
-	cacheWriter := diskCacheWriter{
-		tempfile: tempfile,
-		header: make(http.Header),
-		realWriter: realWriter,
+	// reopen file for the benefit of this reader, so the read position is independent of the write position
+	// we have to do this up here to avoid a race condition with populate() calling Finish(), which removes the tempfile
+	file, err = os.Open(tempfile.Name())
+	if err != nil {
+		tempfile.Close()
+		return errors.New(fmt.Sprintf("Couldn't reopen tempfile %s: %s", tempfile.Name(), err))
 	}
-	if err := miss(&cacheWriter); err != nil {
-		cacheWriter.Abort(nil)
-		return err
+	defer file.Close()
+
+	progress := newProgressTracker()
+	go cache.populate(path, tempfile, progress, miss)
+
+	err = progress.WaitForResponse()
+	if err == Uncacheable {
+		return miss(realWriter)
+	} else if err != nil {
+		return err;
 	}
-	if err := cacheWriter.Finish(cache.cacheEntryPath(key)); err != nil {
-		return err
-	}
+
+	err = cache.streamFromCacheInProgress(realWriter, file, progress)
+
 	return os.ErrNotExist // indicates a cache miss
 }
 
-func (cache diskCache) ServeCacheHit(w http.ResponseWriter, file *os.File) error {
-	defer file.Close()
-	streamer := msgp.NewReader(file)
+func (cache diskCache) populate(path string, tempfile *os.File, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
+	writer := diskCacheWriter{
+		tempfile: tempfile,
+		header: make(http.Header),
+		progress: progress,
+	}
+	if err := miss(&writer); err != nil {
+		writer.Abort(err)
+		return
+	}
+	if err := writer.Finish(path); err != nil {
+		writer.Abort(err)
+		return
+	}
+}
 
+func (cache diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msgp.Reader) error {
 	var diskCacheHeader DiskCacheHeader
 	if err := diskCacheHeader.DecodeMsg(streamer); err != nil {
 		return err;
@@ -65,108 +89,37 @@ func (cache diskCache) ServeCacheHit(w http.ResponseWriter, file *os.File) error
 
 	CopyHeader(w.Header(), diskCacheHeader.Header)
 	w.WriteHeader(diskCacheHeader.Status)
-	_, err := io.Copy(w, streamer)
+	return nil
+}
+
+func (cache diskCache) serveFromCache(w http.ResponseWriter, file *os.File) error {
+	reader := msgp.NewReader(file)
+	if err := cache.serveHeaderFromCache(w, reader); err != nil {
+		return err
+	}
+	_, err := io.Copy(w, reader)
 	return err
 }
 
-type diskCacheWriter struct {
-	tempfile *os.File
-	header http.Header
-	realWriter http.ResponseWriter
-}
-
-func (writer *diskCacheWriter) Header() http.Header {
-	return writer.header
-}
-
-func (writer *diskCacheWriter) WriteHeader(status int) {
-	CopyHeader(writer.realWriter.Header(), writer.Header())
-	writer.realWriter.WriteHeader(status)
-
-	if writer.Aborted() {
-		return
-	}
-
-	if !CacheableResponse(status, writer.Header()) {
-		writer.Uncacheable()
-		return
-	}
-
-	diskCacheHeader := DiskCacheHeader{
-		Version: 1,
-		Status:  status,
-		Header:  writer.header,
-	}
-
-	streamer := msgp.NewWriter(writer.tempfile)
-
-	if err := diskCacheHeader.EncodeMsg(streamer); err != nil {
-		writer.Abort(err)
-		return
-	}
-
-	if err := streamer.Flush(); err != nil {
-		writer.Abort(err)
-		return
-	}
-}
-
-func (writer *diskCacheWriter) Write(data []byte) (int, error) {
-	n, err := writer.realWriter.Write(data)
-
-	if writer.Aborted() {
-		return n, err
-	}
-
-	n, err = writer.tempfile.Write(data)
-	if err != nil {
-		writer.Abort(err)
-	}
-	return n, err
-}
-
-func (writer *diskCacheWriter) Finish(path string) error {
-	if writer.Aborted() {
-		return nil
-	}
-
-	if err := writer.tempfile.Close(); err != nil {
+func (cache diskCache) streamFromCacheInProgress(w http.ResponseWriter, file *os.File, progress *progressTracker) error {
+	reader := msgp.NewReader(file)
+	if err := cache.serveHeaderFromCache(w, reader); err != nil {
 		return err
 	}
 
-	if err := os.Link(writer.tempfile.Name(), path); err != nil {
-		return err
+	var position int64 = 0
+	for {
+		n, err := io.Copy(w, reader)
+		position += n
+		if err != nil {
+			return err
+		}
+
+		err = progress.WaitForMore(position)
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
+			return err
+		}
 	}
-
-	if err := os.Remove(writer.tempfile.Name()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (writer *diskCacheWriter) Abort(reason error) error {
-	if reason != nil {
-		fmt.Fprintf(os.Stderr, "error writing to cache: %s\n", reason)
-	}
-
-	if err := writer.tempfile.Close(); err != nil {
-		return err
-	}
-
-	if err := os.Remove(writer.tempfile.Name()); err != nil {
-		return err
-	}
-
-	writer.tempfile = nil
-
-	return nil
-}
-
-func (writer *diskCacheWriter) Uncacheable() error {
-	return writer.Abort(nil)
-}
-
-func (writer *diskCacheWriter) Aborted() bool {
-	return (writer.tempfile == nil)
 }

@@ -27,7 +27,7 @@ func (cache *memoryCache) Get(key string, realWriter http.ResponseWriter, miss f
 	cache.RUnlock()
 
 	if ok {
-		return cache.ServeCacheHit(realWriter, entry)
+		return cache.serveCacheHit(realWriter, entry)
 	}
 
 	cacheWriter := memoryCacheWriter{
@@ -46,7 +46,7 @@ func (cache *memoryCache) Get(key string, realWriter http.ResponseWriter, miss f
 	return os.ErrNotExist // indicates a cache miss
 }
 
-func (cache *memoryCache) ServeCacheHit(w http.ResponseWriter, entry memoryCacheEntry) error {
+func (cache *memoryCache) serveCacheHit(w http.ResponseWriter, entry memoryCacheEntry) error {
 	CopyHeader(w.Header(), entry.header)
 	w.WriteHeader(entry.status)
 	_, err := w.Write(entry.body)
