@@ -5,8 +5,8 @@ import "errors"
 import "net/http"
 import "os"
 
-func returnNotExist(writer http.ResponseWriter) error {
-	return os.ErrNotExist
+func returnDummyError(writer http.ResponseWriter) error {
+	return errors.New("dummy error")
 }
 
 func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
@@ -21,10 +21,10 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	}
 
 	// test opening but not starting a write
-	err := cache.Get("key1", newDummyResponseWriter(t), returnNotExist)
+	err := cache.Get("key1", newDummyResponseWriter(t), returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	err = cache.Get("key1", newDummyResponseWriter(t), returnNotExist)
+	err = cache.Get("key1", newDummyResponseWriter(t), returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test setting up but not performing a write
@@ -34,7 +34,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	})
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	err = cache.Get("key1", newDummyResponseWriter(t), returnNotExist)
+	err = cache.Get("key1", newDummyResponseWriter(t), returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test aborting a write before starting the body
@@ -45,7 +45,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	})
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	err = cache.Get("key1", newDummyResponseWriter(t), returnNotExist)
+	err = cache.Get("key1", newDummyResponseWriter(t), returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test aborting a write after starting the body
@@ -57,7 +57,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	})
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
-	err = cache.Get("key1", newDummyResponseWriter(t), returnNotExist)
+	err = cache.Get("key1", newDummyResponseWriter(t), returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 
 	// test an actual write
@@ -74,7 +74,7 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 
 	// test other keys are still not present
 	responseWriter = newDummyResponseWriter(t)
-	err = cache.Get("key3", responseWriter, returnNotExist)
+	err = cache.Get("key3", responseWriter, returnDummyError)
 	if err == nil { t.Error("Cache should not contain key not finished") }
 }
 
