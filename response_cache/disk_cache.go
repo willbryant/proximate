@@ -13,16 +13,16 @@ type diskCache struct {
 }
 
 func NewDiskCache(cacheDirectory string) ResponseCache {
-	return diskCache{
+	return &diskCache{
 		cacheDirectory: cacheDirectory,
 	}
 }
 
-func (cache diskCache) cacheEntryPath(key string) string {
+func (cache *diskCache) cacheEntryPath(key string) string {
 	return cache.cacheDirectory + "/" + key
 }
 
-func (cache diskCache) Get(key string, realWriter http.ResponseWriter, miss func(writer http.ResponseWriter) error) error {
+func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss func(writer http.ResponseWriter) error) error {
 	path := cache.cacheEntryPath(key)
 	file, err := os.Open(path)
 
@@ -65,7 +65,7 @@ func (cache diskCache) Get(key string, realWriter http.ResponseWriter, miss func
 	return os.ErrNotExist // indicates a cache miss
 }
 
-func (cache diskCache) populate(path string, tempfile *os.File, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
+func (cache *diskCache) populate(path string, tempfile *os.File, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
 	writer := diskCacheWriter{
 		tempfile: tempfile,
 		header: make(http.Header),
@@ -81,7 +81,7 @@ func (cache diskCache) populate(path string, tempfile *os.File, progress *progre
 	}
 }
 
-func (cache diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msgp.Reader) error {
+func (cache *diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msgp.Reader) error {
 	var diskCacheHeader DiskCacheHeader
 	if err := diskCacheHeader.DecodeMsg(streamer); err != nil {
 		return err;
@@ -92,7 +92,7 @@ func (cache diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msg
 	return nil
 }
 
-func (cache diskCache) serveFromCache(w http.ResponseWriter, file *os.File) error {
+func (cache *diskCache) serveFromCache(w http.ResponseWriter, file *os.File) error {
 	reader := msgp.NewReader(file)
 	if err := cache.serveHeaderFromCache(w, reader); err != nil {
 		return err
@@ -101,7 +101,7 @@ func (cache diskCache) serveFromCache(w http.ResponseWriter, file *os.File) erro
 	return err
 }
 
-func (cache diskCache) streamFromCacheInProgress(w http.ResponseWriter, file *os.File, progress *progressTracker) error {
+func (cache *diskCache) streamFromCacheInProgress(w http.ResponseWriter, file *os.File, progress *progressTracker) error {
 	reader := msgp.NewReader(file)
 	if err := cache.serveHeaderFromCache(w, reader); err != nil {
 		return err
