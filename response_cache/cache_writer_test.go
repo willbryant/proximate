@@ -25,7 +25,7 @@ func (responseData responseData) copyResponseTo(writer http.ResponseWriter) erro
 
 type dummyResponseWriter struct {
 	response responseData
-	t *testing.T
+	t        *testing.T
 }
 
 func (responseWriter *dummyResponseWriter) Header() http.Header {

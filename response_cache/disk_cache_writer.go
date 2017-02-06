@@ -7,7 +7,7 @@ import "os"
 
 type diskCacheWriter struct {
 	tempfile *os.File
-	header http.Header
+	header   http.Header
 	progress *progressTracker
 }
 

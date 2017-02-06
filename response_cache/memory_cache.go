@@ -54,7 +54,7 @@ func (cache *memoryCache) serveCacheHit(w http.ResponseWriter, entry memoryCache
 }
 
 type memoryCacheWriter struct {
-	entry memoryCacheEntry
+	entry      memoryCacheEntry
 	realWriter http.ResponseWriter
 }
 

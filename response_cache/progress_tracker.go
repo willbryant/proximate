@@ -15,15 +15,15 @@ const (
 )
 
 type progressTracker struct {
-	cond sync.Cond
-	state int
+	cond   sync.Cond
+	state  int
 	length int64
 	reason error
 }
 
 func newProgressTracker() *progressTracker {
 	return &progressTracker{
-		cond: sync.Cond{L: &sync.Mutex{}},
+		cond:  sync.Cond{L: &sync.Mutex{}},
 		state: StatePending,
 	}
 }
@@ -68,7 +68,7 @@ func (progress *progressTracker) WaitForResponse() error {
 	defer progress.cond.L.Unlock()
 
 	for {
-		switch (progress.state) {
+		switch progress.state {
 		case StatePending:
 			progress.cond.Wait()
 
@@ -86,18 +86,18 @@ func (progress *progressTracker) WaitForMore(position int64) error {
 	defer progress.cond.L.Unlock()
 
 	for {
-		switch (progress.state) {
+		switch progress.state {
 		case StatePending:
 			return errors.New("waitForMore used before the header was complete")
 
 		case StateReading:
-			if (progress.length > position) {
+			if progress.length > position {
 				return nil
 			}
 			progress.cond.Wait()
 
 		case StateSuccess:
-			if (progress.length > position) {
+			if progress.length > position {
 				return nil
 			}
 			return io.EOF

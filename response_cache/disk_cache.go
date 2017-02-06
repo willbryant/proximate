@@ -57,7 +57,7 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 	if err == Uncacheable {
 		return miss(realWriter)
 	} else if err != nil {
-		return err;
+		return err
 	}
 
 	err = cache.streamFromCacheInProgress(realWriter, file, progress)
@@ -68,7 +68,7 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 func (cache *diskCache) populate(path string, tempfile *os.File, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
 	writer := diskCacheWriter{
 		tempfile: tempfile,
-		header: make(http.Header),
+		header:   make(http.Header),
 		progress: progress,
 	}
 	if err := miss(&writer); err != nil {
@@ -84,7 +84,7 @@ func (cache *diskCache) populate(path string, tempfile *os.File, progress *progr
 func (cache *diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msgp.Reader) error {
 	var diskCacheHeader DiskCacheHeader
 	if err := diskCacheHeader.DecodeMsg(streamer); err != nil {
-		return err;
+		return err
 	}
 
 	CopyHeader(w.Header(), diskCacheHeader.Header)
