@@ -1,20 +1,21 @@
 package response_cache
 
-import "errors"
-import "fmt"
 import "io"
-import "io/ioutil"
 import "github.com/tinylib/msgp/msgp"
 import "net/http"
+import "sync"
 import "os"
 
 type diskCache struct {
 	cacheDirectory string
+	progressTrackersMutex sync.Mutex
+	progressTrackers map[string]*progressTracker
 }
 
 func NewDiskCache(cacheDirectory string) ResponseCache {
 	return &diskCache{
 		cacheDirectory: cacheDirectory,
+		progressTrackers: make(map[string]*progressTracker),
 	}
 }
 
@@ -34,24 +35,8 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 		return err
 	}
 
-	// cache miss; open a new tempfile to write to
-	tempfile, err := ioutil.TempFile(cache.cacheDirectory, "_temp")
-	if err != nil {
-		miss(realWriter)
-		return err
-	}
-
-	// reopen file for the benefit of this reader, so the read position is independent of the write position
-	// we have to do this up here to avoid a race condition with populate() calling Finish(), which removes the tempfile
-	file, err = os.Open(tempfile.Name())
-	if err != nil {
-		tempfile.Close()
-		return errors.New(fmt.Sprintf("Couldn't reopen tempfile %s: %s", tempfile.Name(), err))
-	}
-	defer file.Close()
-
-	progress := newProgressTracker()
-	go cache.populate(path, tempfile, progress, miss)
+	// cache miss
+	progress := cache.progressTrackerFor(path, miss)
 
 	err = progress.WaitForResponse()
 	if err == Uncacheable {
@@ -60,25 +45,52 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 		return err
 	}
 
+	file, err = os.Open(path + ".temp")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
 	err = cache.streamFromCacheInProgress(realWriter, file, progress)
 
 	return os.ErrNotExist // indicates a cache miss
 }
 
-func (cache *diskCache) populate(path string, tempfile *os.File, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
+func (cache *diskCache) progressTrackerFor(path string, miss func(writer http.ResponseWriter) error) *progressTracker {
+	cache.progressTrackersMutex.Lock()
+	defer cache.progressTrackersMutex.Unlock()
+	progress := cache.progressTrackers[path]
+	if progress == nil {
+		progress = newProgressTracker()
+		cache.progressTrackers[path] = progress
+		go cache.populate(path, progress, miss)
+	}
+	return progress
+}
+
+func (cache *diskCache) clearProgressTrackerFor(path string) {
+	cache.progressTrackersMutex.Lock()
+	defer cache.progressTrackersMutex.Unlock()
+	delete(cache.progressTrackers, path)
+}
+
+func (cache *diskCache) populate(path string, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
+	file, err := os.OpenFile(path + ".temp", os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return
+	}
 	writer := diskCacheWriter{
-		tempfile: tempfile,
+		tempfile: file,
 		header:   make(http.Header),
 		progress: progress,
 	}
-	if err := miss(&writer); err != nil {
-		writer.Abort(err)
-		return
+	err = miss(&writer)
+	if err == nil {
+		err = writer.Finish(path)
 	}
-	if err := writer.Finish(path); err != nil {
+	if err != nil {
 		writer.Abort(err)
-		return
 	}
+	cache.clearProgressTrackerFor(path)
 }
 
 func (cache *diskCache) serveHeaderFromCache(w http.ResponseWriter, streamer *msgp.Reader) error {
