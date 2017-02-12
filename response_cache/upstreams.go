@@ -33,8 +33,16 @@ func NewUpstreams(cacheServers string) *Upstreams {
 
 func (upstreams *Upstreams) UpstreamListed(url *url.URL) bool {
 	if paths, ok := upstreams.hosts[url.Host]; ok {
+		// although the docs say url.Parse will set both Path and RawPath, the requests passed in
+		// from ServePath only seem to set RawPath if there were encoded characters.  but if there
+		// were, we want to use RawPath so we correctly handle matching / characters etc.
+		urlPath := url.Path
+		if url.RawPath != "" {
+			urlPath = url.RawPath
+		}
+
 		for _, path := range paths {
-			if strings.HasPrefix(url.Path, path) {
+			if strings.HasPrefix(urlPath, path) {
 				return true
 			}
 		}

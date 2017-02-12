@@ -36,6 +36,7 @@ func TestUpstreams(t *testing.T) {
 	assertListed(t, upstreams, "https://github.com/willbryant/proximate.git")
 	assertListed(t, upstreams, "https://github.com/willbryant/")
 	assertNotListed(t, upstreams, "https://github.com/willbryant")
+	assertNotListed(t, upstreams, "https://github.com/willbryant%2f")
 	assertNotListed(t, upstreams, "https://github.com/other")
 	assertNotListed(t, upstreams, "https://github.com/")
 	assertNotListed(t, upstreams, "https://github.com")
