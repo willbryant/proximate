@@ -51,7 +51,9 @@ func cachableGitPackRequest(req *http.Request) bool {
 func cacheableDebPoolRequest(req *http.Request) bool {
 	return req.Method == "GET" &&
 		req.Header.Get("Cache-Control") == "" &&
-		req.Header.Get("Authorization") == ""
+		req.Header.Get("Authorization") == "" &&
+		strings.HasSuffix(req.URL.Path, ".deb") &&
+		strings.Contains(req.URL.Path, "/pool/")
 }
 
 func (server proximateServer) serveCacheableRequest(realWriter http.ResponseWriter, req *http.Request) {
