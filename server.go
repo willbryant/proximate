@@ -70,6 +70,8 @@ func (server proximateServer) serveCacheableRequest(realWriter http.ResponseWrit
 
 	if err == nil {
 		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
+	} else if err == response_cache.Uncacheable {
+		fmt.Fprintf(os.Stdout, "%s request to %s was not actually cacheable, request hash %s\n", req.Method, req.URL, hash)
 	} else if !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stdout, "error caching %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
 	}

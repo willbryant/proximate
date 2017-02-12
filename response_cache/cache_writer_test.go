@@ -123,18 +123,25 @@ func TestCacheWriter(t *testing.T) {
 		},
 	}
 
+	cache := NewDiskCache("test/cache")
+
 	for index, scenario := range scenarios {
-		cache := NewMemoryCache()
+		cache.Clear()
 		cacheKey := fmt.Sprintf("cache_key_%d", index)
 		responseWriter := newDummyResponseWriter(t)
 
 		// write the scenario to the cache adapter
+		called := false
 		err := cache.Get(cacheKey, responseWriter, func(writer http.ResponseWriter) error {
+			called = true
 			scenario.copyResponseTo(writer)
 			return nil
 		})
-		if !os.IsNotExist(err) {
+		if !called {
 			t.Error("request callback wasn't called")
+		}
+		if !os.IsNotExist(err) && err != Uncacheable {
+			t.Error(fmt.Sprintf("result wasn't an IsNotExist or Uncacheable, was %s", err))
 		}
 
 		// check it was all forwarded through to the real HTTP response writer

@@ -10,6 +10,8 @@ func returnDummyError(writer http.ResponseWriter) error {
 }
 
 func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
+	cache.Clear()
+
 	dummyHeader := make(http.Header)
 	dummyHeader.Add("Host", "www.example.com")
 	dummyHeader.Add("Content-Type", "text/html")
@@ -98,10 +100,6 @@ func testCacheSetAndGet(t *testing.T, cache ResponseCache) {
 	if err == nil {
 		t.Error("Cache should not contain key not finished")
 	}
-}
-
-func TestMemoryCacheSetAndGet(t *testing.T) {
-	testCacheSetAndGet(t, NewMemoryCache())
 }
 
 func TestDiskCacheSetAndGet(t *testing.T) {

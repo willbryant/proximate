@@ -40,7 +40,12 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 
 	err = progress.WaitForResponse()
 	if err == Uncacheable {
-		return miss(realWriter)
+		// TODO: this results in a second upstream request, which is not ideal - would be better to stream the first request to just one client
+		err = miss(realWriter)
+		if err != nil {
+			return err
+		}
+		return Uncacheable
 	} else if err != nil {
 		return err
 	}
@@ -133,6 +138,39 @@ func (cache *diskCache) streamFromCacheInProgress(w http.ResponseWriter, file *o
 			return nil
 		} else if err != nil {
 			return err
+		}
+	}
+}
+
+func (cache *diskCache) Clear() error {
+	return clearDirectory(cache.cacheDirectory)
+}
+
+func clearDirectory(directory string) error {
+	dir, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+
+	for {
+		filenames, err := dir.Readdirnames(1000)
+
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		for _, filename := range filenames {
+			// ignore hidden files in the cache root directory
+			if filename[0] != '.' {
+				err := os.RemoveAll(directory + string(os.PathSeparator) + filename)
+
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+			}
 		}
 	}
 }
