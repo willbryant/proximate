@@ -59,7 +59,7 @@ func newDummyResponseWriter(t *testing.T) *dummyResponseWriter {
 
 func testResponse(t *testing.T, response responseData, expectedStatus int, expectedHeader http.Header, expectedData []byte) {
 	if response.Status != expectedStatus {
-		t.Error("cache stored wrong status")
+		t.Error(fmt.Sprintf("cache stored wrong status (%d instead of %d)", response.Status, expectedStatus))
 	}
 	if !reflect.DeepEqual(response.Header, expectedHeader) {
 		t.Error("Header was not restored from the cache")
@@ -156,10 +156,11 @@ func TestCacheWriter(t *testing.T) {
 		var missed = false
 		err = cache.Get(cacheKey, responseWriter, func(writer http.ResponseWriter) error {
 			missed = true
+			scenario.copyResponseTo(writer)
 			return nil
 		})
 		if !scenario.ShouldStore {
-			if !os.IsNotExist(err) {
+			if err != Uncacheable {
 				t.Error("couldn't perform cache miss: " + err.Error())
 			}
 			if !missed {
@@ -171,9 +172,8 @@ func TestCacheWriter(t *testing.T) {
 			} else {
 				t.Error("couldn't read response from cache: " + err.Error())
 			}
-		} else {
-			// check it was stored in the cache correctly
-			testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
 		}
+		// check it was replayed from the cache correctly - or the miss function results copied through correctly
+		testResponse(t, responseWriter.response, scenario.responseData.Status, scenario.responseData.Header, expectedData)
 	}
 }
