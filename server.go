@@ -9,21 +9,25 @@ import "github.com/willbryant/proximate/response_cache"
 import "strings"
 
 type proximateServer struct {
-	Listener net.Listener
-	Tracker  *ConnectionTracker
-	Closed   uint32
-	Quiet    bool
-	Cache    response_cache.ResponseCache
-	Proxy    *httputil.ReverseProxy
+	Listener         net.Listener
+	Tracker          *ConnectionTracker
+	Closed           uint32
+	Quiet            bool
+	Cache            response_cache.ResponseCache
+	GitPackUpstreams *response_cache.Upstreams
+	DebPoolUpstreams *response_cache.Upstreams
+	Proxy            *httputil.ReverseProxy
 }
 
-func ProximateServer(listener net.Listener, cacheDirectory string, quiet bool) proximateServer {
+func ProximateServer(listener net.Listener, cacheDirectory string, gitPackUpstreams string, debPoolUpstreams string, quiet bool) proximateServer {
 	return proximateServer{
-		Listener: listener,
-		Tracker:  NewConnectionTracker(),
-		Quiet:    quiet,
-		Cache:    response_cache.NewDiskCache(cacheDirectory),
-		Proxy:    &httputil.ReverseProxy{Director: setProxyUserAgentDirector},
+		Listener:         listener,
+		Tracker:          NewConnectionTracker(),
+		Quiet:            quiet,
+		Cache:            response_cache.NewDiskCache(cacheDirectory),
+		GitPackUpstreams: response_cache.NewUpstreams(gitPackUpstreams),
+		DebPoolUpstreams: response_cache.NewUpstreams(debPoolUpstreams),
+		Proxy:            &httputil.ReverseProxy{Director: setProxyUserAgentDirector},
 	}
 }
 
@@ -35,7 +39,7 @@ func setProxyUserAgentDirector(req *http.Request) {
 	fmt.Fprintf(os.Stdout, "proxying %s request to %s\n", req.Method, req.URL)
 }
 
-func cachableUploadGitPackRequest(req *http.Request) bool {
+func cachableGitPackRequest(req *http.Request) bool {
 	return req.ContentLength > 0 && req.ContentLength < 65536 && // arbitrary
 		req.Method == "POST" &&
 		req.Header.Get("Content-Type") == "application/x-git-upload-pack-request" &&
@@ -44,7 +48,13 @@ func cachableUploadGitPackRequest(req *http.Request) bool {
 		req.Header.Get("Authorization") == ""
 }
 
-func (server proximateServer) serveGitPackRequest(realWriter http.ResponseWriter, req *http.Request) {
+func cacheableDebPoolRequest(req *http.Request) bool {
+	return req.Method == "GET" &&
+		req.Header.Get("Cache-Control") == "" &&
+		req.Header.Get("Authorization") == ""
+}
+
+func (server proximateServer) serveCacheableRequest(realWriter http.ResponseWriter, req *http.Request) {
 	hash, err := response_cache.HashRequestAndBody(req)
 	if err != nil {
 		http.Error(realWriter, err.Error(), 401)
@@ -76,8 +86,9 @@ func (server proximateServer) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	server.extractHostFromPrefix(req)
 
-	if cachableUploadGitPackRequest(req) {
-		server.serveGitPackRequest(logger, req)
+	if (cachableGitPackRequest(req) && server.GitPackUpstreams.UpstreamListed(req.URL)) ||
+		(cacheableDebPoolRequest(req) && server.DebPoolUpstreams.UpstreamListed(req.URL)) {
+		server.serveCacheableRequest(logger, req)
 	} else {
 		server.Proxy.ServeHTTP(logger, req)
 	}

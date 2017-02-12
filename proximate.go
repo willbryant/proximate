@@ -32,11 +32,13 @@ func default_cache_directory() string {
 }
 
 func main() {
-	var cacheDirectory, listenAddress, port string
+	var cacheDirectory, cacheGitPackServers, cacheDebPoolServers, listenAddress, port string
 	var healthCheckPath, healthyIfFile, healthyUnlessFile string
 	var quiet bool
 
 	flag.StringVar(&cacheDirectory, "data", default_cache_directory(), "Sets the root data directory to /foo.  Must be fully-qualified (ie. it must start with a /).")
+	flag.StringVar(&cacheGitPackServers, "cache-git-packs", "", "Cache git pack requests from this comma-separated list of servers.  May include paths (eg. \"github.com/willbryant,github.com/rails,gitlab.com\").")
+	flag.StringVar(&cacheDebPoolServers, "cache-deb-pools", "", "Cache deb pool requests from this comma-separated list of servers.  May include paths (eg. \"security.ubuntu.com,somemirrors.org/ubuntu\").")
 	flag.StringVar(&listenAddress, "listen", DefaultListenAddress, "Listen on the given IP address.  Default: listen on all network interfaces.")
 	flag.StringVar(&port, "port", DefaultPort, "Listen on the given port.")
 	flag.BoolVar(&quiet, "quiet", false, "Quiet mode.  Don't print startup/shutdown/request log messages to stdout.")
@@ -57,7 +59,7 @@ func main() {
 		fmt.Fprintf(os.Stdout, "%s listening on http://%s:%s, cache in %s\n", banner(), listenAddress, port, cacheDirectory)
 	}
 
-	server := ProximateServer(listener, cacheDirectory, quiet)
+	server := ProximateServer(listener, cacheDirectory, cacheGitPackServers, cacheDebPoolServers, quiet)
 	go waitForSignals(&server)
 
 	if healthCheckPath != "" {
