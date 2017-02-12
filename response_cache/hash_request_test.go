@@ -27,15 +27,15 @@ func dummyHeader() http.Header {
 }
 
 func dummyRequest() *http.Request {
-	return &http.Request {
-		Method: "GET",
-		URL: dummyURL(),
-		Proto: "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header: dummyHeader(),
+	return &http.Request{
+		Method:        "GET",
+		URL:           dummyURL(),
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        dummyHeader(),
 		ContentLength: 16,
-		Body: ioutil.NopCloser(strings.NewReader("0123456789abcdef")),
+		Body:          ioutil.NopCloser(strings.NewReader("0123456789abcdef")),
 	}
 }
 
@@ -52,41 +52,59 @@ func TestHashRequestAndBody(t *testing.T) {
 	hash := hashOf(dummyReq)
 
 	req := dummyRequest()
-	if hashOf(req) != hash { t.Error("hash not repeatable on the same request") }
+	if hashOf(req) != hash {
+		t.Error("hash not repeatable on the same request")
+	}
 
 	req = dummyRequest()
 	req.Method = "POST"
-	if hashOf(req) == hash { t.Error("hash did not vary on Method") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Method")
+	}
 
 	req = dummyRequest()
 	req.URL = parseURL("http://user:pass@example.com/some/path?some=query&other=1")
-	if hashOf(req) == hash { t.Error("hash did not vary on URL") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on URL")
+	}
 
 	req = dummyRequest()
 	req.URL = parseURL("https://user:pass@example.com/some/path?some=query")
-	if hashOf(req) == hash { t.Error("hash did not vary on URL") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on URL")
+	}
 
 	req = dummyRequest()
 	req.Proto = "HTTP/1.0"
 	req.ProtoMinor = 0
-	if hashOf(req) == hash { t.Error("hash did not vary on Proto or ProtoMajor/ProtoMinor") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Proto or ProtoMajor/ProtoMinor")
+	}
 
 	req = dummyRequest()
 	req.Header = dummyHeader()
 	req.Header.Add("X-Served-By", "test case")
-	if hashOf(req) == hash { t.Error("hash did not vary on Header additions") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Header additions")
+	}
 
 	req = dummyRequest()
 	req.Header = dummyHeader()
 	req.Header.Set("Content-Type", "text/plain")
-	if hashOf(req) == hash { t.Error("hash did not vary on Header changes") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Header changes")
+	}
 
 	req = dummyRequest()
 	req.Body = ioutil.NopCloser(strings.NewReader("123456789abcdef0"))
-	if hashOf(req) == hash { t.Error("hash did not vary on Body content changes") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Body content changes")
+	}
 
 	req = dummyRequest()
 	req.ContentLength = 17
 	req.Body = ioutil.NopCloser(strings.NewReader("0123456789abcdef_"))
-	if hashOf(req) == hash { t.Error("hash did not vary on Body length changes") }
+	if hashOf(req) == hash {
+		t.Error("hash did not vary on Body length changes")
+	}
 }

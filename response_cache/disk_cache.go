@@ -7,14 +7,14 @@ import "sync"
 import "os"
 
 type diskCache struct {
-	cacheDirectory string
+	cacheDirectory        string
 	progressTrackersMutex sync.Mutex
-	progressTrackers map[string]*progressTracker
+	progressTrackers      map[string]*progressTracker
 }
 
 func NewDiskCache(cacheDirectory string) ResponseCache {
 	return &diskCache{
-		cacheDirectory: cacheDirectory,
+		cacheDirectory:   cacheDirectory,
 		progressTrackers: make(map[string]*progressTracker),
 	}
 }
@@ -75,7 +75,7 @@ func (cache *diskCache) clearProgressTrackerFor(path string) {
 }
 
 func (cache *diskCache) populate(path string, progress *progressTracker, miss func(writer http.ResponseWriter) error) {
-	file, err := os.OpenFile(path + ".temp", os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	file, err := os.OpenFile(path+".temp", os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
 	if err != nil {
 		return
 	}
