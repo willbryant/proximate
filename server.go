@@ -84,7 +84,12 @@ func (server proximateServer) extractHostFromPrefix(req *http.Request) {
 func (server proximateServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	logger := &responseLogger{w: w, req: req}
 
-	server.extractHostFromPrefix(req)
+	// proxy-mode requests will have a full URL in the request path, with the Host populated;
+	// we don't need to touch those.  get-mode requests we move the first bit of the path down
+	// to be the host.
+	if req.URL.Host == "" {
+		server.extractHostFromPrefix(req)
+	}
 
 	if (cachableGitPackRequest(req) && server.GitPackUpstreams.UpstreamListed(req.URL)) ||
 		(cacheableDebPoolRequest(req) && server.DebPoolUpstreams.UpstreamListed(req.URL)) {
