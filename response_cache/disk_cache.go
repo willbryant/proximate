@@ -45,6 +45,7 @@ func (cache *diskCache) Get(key string, realWriter http.ResponseWriter, miss fun
 		return err
 	}
 
+	// TODO: race here if the miss function completes quickly
 	file, err = os.Open(path + ".temp")
 	if err != nil {
 		return err
