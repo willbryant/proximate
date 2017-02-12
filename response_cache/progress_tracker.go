@@ -11,7 +11,6 @@ const (
 	StateReading
 	StateSuccess
 	StateFailure
-	StateUncacheable
 )
 
 type progressTracker struct {
