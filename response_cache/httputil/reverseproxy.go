@@ -129,6 +129,14 @@ var hopHeaders = []string{
 }
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	err := p.Forward(rw, req)
+	if err != nil {
+		p.logf("http: proxy error: %v", err)
+		rw.WriteHeader(http.StatusBadGateway)
+	}
+}
+
+func (p *ReverseProxy) Forward(rw http.ResponseWriter, req *http.Request) error {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -204,9 +212,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	res, err := transport.RoundTrip(outreq)
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
-		rw.WriteHeader(http.StatusBadGateway)
-		return
+		return err
 	}
 
 	// Remove hop-by-hop headers listed in the
@@ -225,9 +231,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if p.ModifyResponse != nil {
 		if err := p.ModifyResponse(res); err != nil {
-			p.logf("http: proxy error: %v", err)
-			rw.WriteHeader(http.StatusBadGateway)
-			return
+			return err
 		}
 	}
 
