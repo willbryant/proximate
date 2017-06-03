@@ -129,19 +129,16 @@ var hopHeaders = []string{
 }
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	err := p.Forward(rw, req)
+	res, err := p.Forward(p.CancelContext(rw, req), req)
 	if err != nil {
 		p.logf("http: proxy error: %v", err)
 		rw.WriteHeader(http.StatusBadGateway)
+	} else {
+		p.CopyResponse(rw, res)
 	}
 }
 
-func (p *ReverseProxy) Forward(rw http.ResponseWriter, req *http.Request) error {
-	transport := p.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-
+func (p *ReverseProxy) CancelContext(rw http.ResponseWriter, req *http.Request) context.Context {
 	ctx := req.Context()
 	if cn, ok := rw.(http.CloseNotifier); ok {
 		var cancel context.CancelFunc
@@ -155,6 +152,14 @@ func (p *ReverseProxy) Forward(rw http.ResponseWriter, req *http.Request) error 
 			case <-ctx.Done():
 			}
 		}()
+	}
+	return ctx;
+}
+
+func (p *ReverseProxy) Forward(ctx context.Context, req *http.Request) (*http.Response, error) {
+	transport := p.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
 	}
 
 	outreq := new(http.Request)
@@ -212,7 +217,7 @@ func (p *ReverseProxy) Forward(rw http.ResponseWriter, req *http.Request) error 
 
 	res, err := transport.RoundTrip(outreq)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Remove hop-by-hop headers listed in the
@@ -231,10 +236,14 @@ func (p *ReverseProxy) Forward(rw http.ResponseWriter, req *http.Request) error 
 
 	if p.ModifyResponse != nil {
 		if err := p.ModifyResponse(res); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
+	return res, nil
+}
+
+func (p *ReverseProxy) CopyResponse(rw http.ResponseWriter, res *http.Response) {
 	copyHeader(rw.Header(), res.Header)
 
 	// The "Trailer" header isn't included in the Transport's response,

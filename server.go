@@ -3,9 +3,9 @@ package main
 import "fmt"
 import "net"
 import "net/http"
-import "net/http/httputil"
 import "os"
 import "github.com/willbryant/proximate/response_cache"
+import "github.com/willbryant/proximate/response_cache/httputil"
 import "strings"
 
 type proximateServer struct {
