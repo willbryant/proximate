@@ -4,8 +4,10 @@ package response_cache
 type DiskCacheHeader struct {
 	Version int `msg:"version"`
 
-	Status int `msg:"status"`
+	StatusCode int `msg:"status_code"`
 
 	// equivalent to: Header http.Header `msg:"header"`
 	Header map[string][]string `msg:"header"`
+
+	ContentLength int64 `msg:"content_length"`
 }

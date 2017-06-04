@@ -56,17 +56,19 @@ func cacheableDebPoolRequest(req *http.Request) bool {
 		strings.Contains(req.URL.Path, "/pool/")
 }
 
-func (server proximateServer) serveCacheableRequest(realWriter http.ResponseWriter, req *http.Request) {
+func (server proximateServer) serveCacheableRequest(rw http.ResponseWriter, req *http.Request) {
 	hash, err := response_cache.HashRequestAndBody(req)
 	if err != nil {
-		http.Error(realWriter, err.Error(), 401)
+		http.Error(rw, err.Error(), 401)
 	}
 
-	err = server.Cache.Get(hash, realWriter, func(cacheWriter http.ResponseWriter) error {
+	res, err := server.Cache.Get(hash, func() (*http.Response, error) {
 		fmt.Fprintf(os.Stdout, "%s request to %s is cacheable, request hash %s\n", req.Method, req.URL, hash)
-		server.Proxy.ServeHTTP(cacheWriter, req)
-		return nil // TODO: how do we detect errors from the proxying?
+		// TODO: never cancel, or at least only cancel if all clients abort?
+		return server.Proxy.Forward(server.Proxy.CancelContext(rw, req), req)
 	})
+
+	server.Proxy.CopyResponse(rw, res)
 
 	if err == nil {
 		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
