@@ -1,18 +1,25 @@
 package response_cache
 
 import "io"
-import "os"
 import "sync"
+
+type File interface {
+	io.Reader
+	io.ReaderAt
+	io.Writer
+	io.Closer
+	Sync() error;
+}
 
 type SharedFile struct {
 	cond   sync.Cond
-	file   *os.File
+	file   File
 	refs   int64
 	length int64
 	err    error
 }
 
-func NewSharedFile(f *os.File) *SharedFile {
+func NewSharedFile(f File) *SharedFile {
 	return &SharedFile{
 		cond:   sync.Cond{L: &sync.Mutex{}},
 		file:   f,

@@ -9,8 +9,8 @@ import "sync"
 import "os"
 
 // error injection functions
-var osOpen = func(path string) (*os.File, error) { return os.Open(path) }
-var osCreate = func(path string) (*os.File, error) { return os.Create(path) }
+var osOpen = func(path string) (File, error) { return os.Open(path) }
+var osCreate = func(path string) (File, error) { return os.Create(path) }
 var logCacheError = func(format string, a ...interface{}) { fmt.Fprintf(os.Stderr, format, a...) }
 
 type diskCache struct {
@@ -87,7 +87,8 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	}
 
 	// open a temporary file to write to
-	file, err := osCreate(path + ".temp")
+	tempPath := path + ".temp"
+	file, err := osCreate(tempPath)
 	sf := NewSharedFile(file)
 
 	if err != nil {
@@ -95,7 +96,7 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	} else {
 		err = cache.writeHeader(sf, res)
 		if err != nil {
-			logCacheError("Error writing to cache path %s for writing: %s\n", path, err)
+			logCacheError("Error writing to cache path %s: %s\n", path, err)
 		}
 	}
 
@@ -110,17 +111,18 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 
 	// copy the response body to the cache
 	go func() {
-		bread, err := io.Copy(sf, res.Body)
-		if err == nil && res.ContentLength > 0 && bread != res.ContentLength {
-			err = errors.New(fmt.Sprintf("response should have been %d bytes but was only %d bytes", res.ContentLength, bread))
-		}
-		if err == nil {
+		n, err := io.Copy(sf, res.Body)
+		if err != nil {
+			// unfortunately, we can't tell if the error came from reading or writing; we'd ideally only log errors from writing
+			logCacheError("Error copying response to cache path %s: %s\n", path, err)
+			sf.Abort(err)
+		} else if res.ContentLength > 0 && n != res.ContentLength {
+			sf.Abort(errors.New(fmt.Sprintf("response should have been %d bytes but was only %d bytes", res.ContentLength, n)))
+		} else {
 			// publish the result in the cache
 			sf.Sync()
-			err = os.Rename(file.Name(), path)
+			err = os.Rename(tempPath, path)
 			sf.Close()
-		} else {
-			sf.Abort(err)
 		}
 		close(done)
 	}()
