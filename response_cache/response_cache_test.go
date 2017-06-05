@@ -114,7 +114,7 @@ func testScenario(t *testing.T, scenario scenarioData) {
 		}
 	} else {
 		if !forwarded {
-			t.Error("response retrieved from cache when it should not have forwarded")
+			t.Error("response retrieved from cache when it should have forwarded")
 		}
 	}
 	if err != scenario.ExpectedError {
@@ -161,10 +161,11 @@ func TestCacheable200WithMultipleReads(t *testing.T) {
 		Header: http.Header{
 			"Content-Type":   []string{"text/html"},
 			"X-Served-By":    []string{"test\ncase", "values"},
-			"Content-Length": []string{"24"},
+			"Content-Length": []string{"32"},
 		},
 		Data: [][]byte{
-			[]byte("Test response body\x00"),
+			[]byte("Test response body"),
+			[]byte("more\x00data"),
 			[]byte("test."),
 		},
 		ShouldCache: true,
@@ -178,7 +179,8 @@ func TestCacheable200WithMultipleReads(t *testing.T) {
 			"X-Served-By":  []string{"test\ncase", "values"},
 		},
 		Data: [][]byte{
-			[]byte("Test response body\x00"),
+			[]byte("Test response body"),
+			[]byte("more\x00data"),
 			[]byte("test."),
 		},
 		ShouldCache: true,
@@ -269,4 +271,19 @@ func TestFileOpenFailure(t *testing.T) {
 		},
 	})
 	osOpen = originalOsOpen
+}
+
+func TestTruncatedBody(t *testing.T) {
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"X-Served-By":    []string{"test case"},
+			"Content-Length": []string{"19"},
+		},
+		Data: [][]byte{
+			[]byte("Test res"),
+		},
+		ShouldCache: false,
+	})
 }

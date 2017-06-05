@@ -1,5 +1,6 @@
 package response_cache
 
+import "errors"
 import "fmt"
 import "io"
 import "github.com/tinylib/msgp/msgp"
@@ -109,16 +110,17 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 
 	// copy the response body to the cache
 	go func() {
-		_, err := io.Copy(sf, res.Body)
+		bread, err := io.Copy(sf, res.Body)
+		if err == nil && res.ContentLength > 0 && bread != res.ContentLength {
+			err = errors.New(fmt.Sprintf("response should have been %d bytes but was only %d bytes", res.ContentLength, bread))
+		}
 		if err == nil {
 			// publish the result in the cache
 			sf.Sync()
 			err = os.Rename(file.Name(), path)
-		}
-		if err != nil {
-			sf.Abort(err)
-		} else {
 			sf.Close()
+		} else {
+			sf.Abort(err)
 		}
 		close(done)
 	}()
