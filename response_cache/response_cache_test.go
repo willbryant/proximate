@@ -72,16 +72,16 @@ func testScenario(t *testing.T, cache ResponseCache, index int, scenario cacheWr
 	cacheKey := fmt.Sprintf("cache_key_%d", index)
 
 	// write the scenario to the cache adapter
-	called := false
+	forwarded := false
 	response, err := cache.Get(cacheKey, func() (*http.Response, error) {
-		called = true
+		forwarded = true
 		return scenario.copyResponse(contentLengthKnown), nil
 	})
-	if !called {
-		t.Error("request callback wasn't called")
+	if !forwarded {
+		t.Error("request callback wasn't forwarded")
 	}
-	if !os.IsNotExist(err) && err != Uncacheable {
-		t.Error(fmt.Sprintf("result wasn't an IsNotExist or Uncacheable, was %s", err))
+	if err != nil && err != Uncacheable {
+		t.Error(fmt.Sprintf("result wasn't nil or Uncacheable, was %s", err))
 	}
 
 	// check it was all forwarded through to the HTTP response object
@@ -92,23 +92,24 @@ func testScenario(t *testing.T, cache ResponseCache, index int, scenario cacheWr
 	testResponse(t, response, scenario.responseData.StatusCode, scenario.responseData.Header, expectedData)
 
 	// check it was stored or not stored in the cache as expected
-	var missed = false
+	forwarded = false
 	response, err = cache.Get(cacheKey, func() (*http.Response, error) {
-		missed = true
+		forwarded = true
 		return scenario.copyResponse(contentLengthKnown), nil
 	})
-	if !scenario.ShouldStore {
+	if scenario.ShouldStore {
+		if err != nil {
+			t.Error("couldn't read response from cache: " + err.Error())
+		}
+		if forwarded {
+			t.Error("response was not written to cache")
+		}
+	} else {
 		if err != Uncacheable {
 			t.Error("couldn't perform cache miss: " + err.Error())
 		}
-		if !missed {
+		if !forwarded {
 			t.Error("response cached when it should not have been")
-		}
-	} else if err != nil {
-		if os.IsNotExist(err) {
-			t.Error("response was not written to cache")
-		} else {
-			t.Error("couldn't read response from cache: " + err.Error())
 		}
 	}
 	// check it was replayed from the cache correctly - or the miss function results copied through correctly

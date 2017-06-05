@@ -42,11 +42,7 @@ func (cache *diskCache) Get(key string, miss func() (*http.Response, error)) (*h
 		// cache miss
 		readFunction, ok := <-cache.channelFor(path, miss)
 		if ok {
-			res, err := readFunction()
-			if err == nil {
-				err = os.ErrNotExist // indicates a cache miss
-			}
-			return res, err
+			return readFunction()
 		}
 		// we missed the forwarding function's execution, which is fine because now it will have stored into the cache.  or
 		// the other possibility is that the response turned out to be uncacheable (eg. an unexpected 500).  in both cases,

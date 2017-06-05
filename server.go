@@ -62,20 +62,23 @@ func (server proximateServer) serveCacheableRequest(rw http.ResponseWriter, req 
 		http.Error(rw, err.Error(), 401)
 	}
 
+	forwarded := false
 	res, err := server.Cache.Get(hash, func() (*http.Response, error) {
-		fmt.Fprintf(os.Stdout, "%s request to %s is cacheable, request hash %s\n", req.Method, req.URL, hash)
+		forwarded = true
 		// TODO: never cancel, or at least only cancel if all clients abort?
 		return server.Proxy.Forward(server.Proxy.CancelContext(rw, req), req)
 	})
 
 	server.Proxy.CopyResponse(rw, res)
 
-	if err == nil {
-		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
-	} else if err == response_cache.Uncacheable {
+	if err == response_cache.Uncacheable {
 		fmt.Fprintf(os.Stdout, "%s request to %s was not actually cacheable, request hash %s\n", req.Method, req.URL, hash)
-	} else if !os.IsNotExist(err) {
-		fmt.Fprintf(os.Stdout, "error caching %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
+	} else if err != nil {
+		fmt.Fprintf(os.Stdout, "error making %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
+	} else if forwarded {
+		fmt.Fprintf(os.Stdout, "%s request to %s saved to cache, request hash %s\n", req.Method, req.URL, hash)
+	} else {
+		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
 	}
 }
 
