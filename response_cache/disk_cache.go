@@ -1,10 +1,16 @@
 package response_cache
 
+import "fmt"
 import "io"
 import "github.com/tinylib/msgp/msgp"
 import "net/http"
 import "sync"
 import "os"
+
+// error injection functions
+var osOpen = func(path string) (*os.File, error) { return os.Open(path) }
+var osCreate = func(path string) (*os.File, error) { return os.Create(path) }
+var logCacheError = func(format string, a ...interface{}) { fmt.Fprintf(os.Stderr, format, a...) }
 
 type diskCache struct {
 	cacheDirectory        string
@@ -28,15 +34,14 @@ func (cache *diskCache) Get(key string, miss func() (*http.Response, error)) (*h
 
 	for {
 		// optimistically try to open the entry in the cache, so we don't need to mutex
-		file, err := os.Open(path)
+		file, err := osOpen(path)
 
 		if err == nil {
 			return cache.cachedResponse(file)
 		}
 
 		if !os.IsNotExist(err) {
-			// TODO: log but otherwise ignore other file open errors
-			return nil, err
+			logCacheError("Error opening cache path %s for reading: %s\n", path, err)
 		}
 
 		// cache miss
@@ -44,8 +49,7 @@ func (cache *diskCache) Get(key string, miss func() (*http.Response, error)) (*h
 		if ok {
 			return readFunction()
 		}
-		// we missed the forwarding function's execution, which is fine because now it will have stored into the cache.  or
-		// the other possibility is that the response turned out to be uncacheable (eg. an unexpected 500).  in both cases,
+		// we missed the forwarding function's execution, which is fine because now it will have stored into the cache.
 		// loop around and try again - having to loop is the price we pay for being optimistic and avoiding the mutex above.
 	}
 }
@@ -82,16 +86,22 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	}
 
 	// open a temporary file to write to
-	file, err := os.OpenFile(path+".temp", os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	file, err := osCreate(path + ".temp")
 	sf := NewSharedFile(file)
 
-	if err == nil {
+	if err != nil {
+		logCacheError("Error opening cache path %s for writing: %s\n", path, err)
+	} else {
 		err = cache.writeHeader(sf, res)
+		if err != nil {
+			logCacheError("Error writing to cache path %s for writing: %s\n", path, err)
+		}
 	}
 
 	// if we can't open that file or write the header to it, handle it like we did above for uncacheable files to minimize client suffering
+	// we've already logged the IO error, so don't return it - it has no further impact
 	if err != nil {
-		ch <- func() (*http.Response, error) { return res, err }
+		ch <- func() (*http.Response, error) { return res, nil }
 		return
 	}
 

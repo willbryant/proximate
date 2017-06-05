@@ -72,13 +72,13 @@ func (server proximateServer) serveCacheableRequest(rw http.ResponseWriter, req 
 	server.Proxy.CopyResponse(rw, res)
 
 	if err == response_cache.Uncacheable {
-		fmt.Fprintf(os.Stdout, "%s request to %s was not actually cacheable, request hash %s\n", req.Method, req.URL, hash)
+		fmt.Fprintf(os.Stdout, "%s request to %s was not actually cacheable, status %d\n", req.Method, req.URL, res.StatusCode)
 	} else if err != nil {
-		fmt.Fprintf(os.Stdout, "error making %s request to %s, request hash %s, error %s\n", req.Method, req.URL, hash, err)
+		fmt.Fprintf(os.Stdout, "%s request to %s failed, error %s\n", req.Method, req.URL, err)
 	} else if forwarded {
-		fmt.Fprintf(os.Stdout, "%s request to %s saved to cache, request hash %s\n", req.Method, req.URL, hash)
+		fmt.Fprintf(os.Stdout, "%s request to %s saved to cache\n", req.Method, req.URL)
 	} else {
-		fmt.Fprintf(os.Stdout, "%s request to %s served from cache, request hash %s\n", req.Method, req.URL, hash)
+		fmt.Fprintf(os.Stdout, "%s request to %s served from cache\n", req.Method, req.URL)
 	}
 }
 

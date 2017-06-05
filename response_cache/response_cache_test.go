@@ -7,19 +7,20 @@ import "fmt"
 import "net/http"
 import "os"
 import "reflect"
+import "strconv"
 
-type responseData struct {
-	StatusCode int
-	Header     http.Header
-	Data       [][]byte // more than one will result in multiple short reads, simulating network traffic
-}
+var cache ResponseCache = NewDiskCache("test/cache")
 
 type multiByteReader struct {
-	data [][]byte
+	data      [][]byte
+	bodyError error
 }
 
 func (reader *multiByteReader) Read(p []byte) (n int, err error) {
 	if len(reader.data) == 0 {
+		if reader.bodyError != nil {
+			return 0, reader.bodyError
+		}
 		return 0, io.EOF
 	}
 	datum := reader.data[0]
@@ -31,19 +32,28 @@ func (reader *multiByteReader) Close() error {
 	return nil
 }
 
-func (responseData responseData) copyResponse(contentLengthKnown bool) *http.Response {
-	contentLength := -1
-	if contentLengthKnown {
-		contentLength = 0
-		for _, b := range responseData.Data {
-			contentLength += len(b)
-		}
+type scenarioData struct {
+	StatusCode        int
+	Header            http.Header
+	Data              [][]byte // more than one will result in multiple short reads, simulating network traffic
+	BodyError         error
+	ShouldCache       bool
+	ExpectedError     error
+	ExpectedErrorLogs []string
+}
+
+func (scenarioData scenarioData) copyResponse() *http.Response {
+	var contentLength int64
+	if cl, ok := scenarioData.Header["Content-Length"]; ok {
+		contentLength, _ = strconv.ParseInt(cl[0], 10, 64)
+	} else {
+		contentLength = -1
 	}
 	return &http.Response{
-		StatusCode:    responseData.StatusCode,
-		Header:        responseData.Header,
+		StatusCode:    scenarioData.StatusCode,
+		Header:        scenarioData.Header,
 		ContentLength: int64(contentLength),
-		Body:          &multiByteReader{responseData.Data},
+		Body:          &multiByteReader{scenarioData.Data, scenarioData.BodyError},
 	}
 }
 
@@ -54,28 +64,27 @@ func testResponse(t *testing.T, response *http.Response, expectedStatus int, exp
 	if !reflect.DeepEqual(response.Header, expectedHeader) {
 		t.Error("Header was not restored from the cache")
 	}
-	var responseData bytes.Buffer
-	io.Copy(&responseData, response.Body)
+	var scenarioData bytes.Buffer
+	io.Copy(&scenarioData, response.Body)
 	response.Body.Close()
-	if !reflect.DeepEqual(responseData.Bytes(), expectedData) {
+	if !reflect.DeepEqual(scenarioData.Bytes(), expectedData) {
 		t.Error("Data was not restored from the cache accurately")
 	}
 }
 
-type cacheWriterTestScenario struct {
-	responseData
-	ShouldStore bool
-}
-
-func testScenario(t *testing.T, cache ResponseCache, index int, scenario cacheWriterTestScenario, contentLengthKnown bool) {
+func testScenario(t *testing.T, scenario scenarioData) {
 	cache.Clear()
-	cacheKey := fmt.Sprintf("cache_key_%d", index)
+	cacheKey := fmt.Sprintf("some_cache_key")
+
+	originalLogCacheError := logCacheError
+	var errorLogs []string
+	logCacheError = func(format string, a ...interface{}) { errorLogs = append(errorLogs, fmt.Sprintf(format, a...)) }
 
 	// write the scenario to the cache adapter
 	forwarded := false
 	response, err := cache.Get(cacheKey, func() (*http.Response, error) {
 		forwarded = true
-		return scenario.copyResponse(contentLengthKnown), nil
+		return scenario.copyResponse(), nil
 	})
 	if !forwarded {
 		t.Error("request callback wasn't forwarded")
@@ -89,83 +98,175 @@ func testScenario(t *testing.T, cache ResponseCache, index int, scenario cacheWr
 	for _, datum := range scenario.Data {
 		expectedData = append(expectedData, datum...)
 	}
-	testResponse(t, response, scenario.responseData.StatusCode, scenario.responseData.Header, expectedData)
+	testResponse(t, response, scenario.StatusCode, scenario.Header, expectedData)
 
 	// check it was stored or not stored in the cache as expected
 	forwarded = false
 	response, err = cache.Get(cacheKey, func() (*http.Response, error) {
 		forwarded = true
-		return scenario.copyResponse(contentLengthKnown), nil
+		return scenario.copyResponse(), nil
 	})
-	if scenario.ShouldStore {
-		if err != nil {
-			t.Error("couldn't read response from cache: " + err.Error())
-		}
+	// check it was replayed from the cache correctly - or the miss function results copied through correctly
+	testResponse(t, response, scenario.StatusCode, scenario.Header, expectedData)
+	if scenario.ShouldCache {
 		if forwarded {
-			t.Error("response was not written to cache")
+			t.Error("response was forwarded again when it should have been retrieved from cache")
 		}
 	} else {
-		if err != Uncacheable {
-			t.Error("couldn't perform cache miss: " + err.Error())
-		}
 		if !forwarded {
-			t.Error("response cached when it should not have been")
+			t.Error("response retrieved from cache when it should not have forwarded")
 		}
 	}
-	// check it was replayed from the cache correctly - or the miss function results copied through correctly
-	testResponse(t, response, scenario.responseData.StatusCode, scenario.responseData.Header, expectedData)
+	if err != scenario.ExpectedError {
+		t.Error(fmt.Sprintf("expected error %s, got %s", scenario.ExpectedError, err))
+	}
+	if !reflect.DeepEqual(scenario.ExpectedErrorLogs, errorLogs) {
+		t.Error(fmt.Sprintf("expected error logs %v, got %v", scenario.ExpectedErrorLogs, errorLogs))
+	}
+
+	logCacheError = originalLogCacheError
 }
 
-func TestCacheWriter(t *testing.T) {
-	scenarios := []cacheWriterTestScenario{
-		{
-			responseData: responseData{
-				StatusCode: 200,
-				Header: http.Header{
-					"Content-Type": []string{"text/html"},
-					"X-Served-By":  []string{"test case"},
-				},
-				Data: [][]byte{
-					[]byte("Test response body."),
-				},
-			},
-			ShouldStore: true,
+func TestCacheable200(t *testing.T) {
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"X-Served-By":    []string{"test case"},
+			"Content-Length": []string{"19"},
 		},
-		{
-			responseData: responseData{
-				StatusCode: 301,
-				Header: http.Header{
-					"Content-Type": []string{"text/html"},
-					"Location":     []string{"http://www.example.com/"},
-					"X-Served-By":  []string{"test case"},
-				},
-				Data: [][]byte{
-					[]byte("You are being redirected."),
-				},
-			},
-			ShouldStore: false,
+		Data: [][]byte{
+			[]byte("Test response body."),
 		},
-		{
-			responseData: responseData{
-				StatusCode: 200,
-				Header: http.Header{
-					"Content-Type": []string{"text/html"},
-					"X-Served-By":  []string{"test\ncase", "values"},
-				},
-				Data: [][]byte{
-					[]byte("Test response body\x00"),
-					[]byte("test."),
-				},
-			},
-			ShouldStore: true,
-		},
-	}
+		ShouldCache: true,
+	})
 
-	cache := NewDiskCache("test/cache")
+	// same but chunked
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+			"X-Served-By":  []string{"test case"},
+		},
+		Data: [][]byte{
+			[]byte("Test response body."),
+		},
+		ShouldCache: true,
+	})
+}
 
-	for index, scenario := range scenarios {
-		fmt.Fprintf(os.Stderr, "--- scenario %d\n", index)
-		testScenario(t, cache, index, scenario, false)
-		testScenario(t, cache, index, scenario, true)
-	}
+func TestCacheable200WithMultipleReads(t *testing.T) {
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"X-Served-By":    []string{"test\ncase", "values"},
+			"Content-Length": []string{"24"},
+		},
+		Data: [][]byte{
+			[]byte("Test response body\x00"),
+			[]byte("test."),
+		},
+		ShouldCache: true,
+	})
+
+	// same but chunked
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+			"X-Served-By":  []string{"test\ncase", "values"},
+		},
+		Data: [][]byte{
+			[]byte("Test response body\x00"),
+			[]byte("test."),
+		},
+		ShouldCache: true,
+	})
+}
+
+func TestUncacheable301(t *testing.T) {
+	testScenario(t, scenarioData{
+		StatusCode: 301,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"Location":       []string{"http://www.example.com/"},
+			"X-Served-By":    []string{"test case"},
+			"Content-Length": []string{"25"},
+		},
+		Data: [][]byte{
+			[]byte("You are being redirected."),
+		},
+		ShouldCache:   false,
+		ExpectedError: Uncacheable,
+	})
+
+	// same but chunked
+	testScenario(t, scenarioData{
+		StatusCode: 301,
+		Header: http.Header{
+			"Content-Type": []string{"text/html"},
+			"Location":     []string{"http://www.example.com/"},
+			"X-Served-By":  []string{"test case"},
+		},
+		Data: [][]byte{
+			[]byte("You are being redirected."),
+		},
+		ShouldCache:   false,
+		ExpectedError: Uncacheable,
+	})
+}
+
+func TestFileCreateFailure(t *testing.T) {
+	originalOsCreate := osCreate
+	osCreate = func(path string) (*os.File, error) { return nil, os.ErrPermission }
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"X-Served-By":    []string{"test case"},
+			"Content-Length": []string{"19"},
+		},
+		Data: [][]byte{
+			[]byte("Test response body."),
+		},
+		ShouldCache: false,
+
+		// the file open error handler should handle and log the error, and then proceed the same as a cache miss - without returning an error
+		ExpectedError: nil,
+
+		// we should see this log twice because testScenario does the request twice
+		ExpectedErrorLogs: []string{
+			"Error opening cache path test/cache/some_cache_key for writing: permission denied\n",
+			"Error opening cache path test/cache/some_cache_key for writing: permission denied\n",
+		},
+	})
+	osCreate = originalOsCreate
+}
+
+func TestFileOpenFailure(t *testing.T) {
+	originalOsOpen := osOpen
+	osOpen = func(path string) (*os.File, error) { return nil, os.ErrPermission }
+	testScenario(t, scenarioData{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":   []string{"text/html"},
+			"X-Served-By":    []string{"test case"},
+			"Content-Length": []string{"19"},
+		},
+		Data: [][]byte{
+			[]byte("Test response body."),
+		},
+		ShouldCache: false,
+
+		// the file open error handler should handle and log the error, and then proceed the same as a cache miss - without returning an error
+		ExpectedError: nil,
+
+		// we should see this log twice because testScenario does the request twice
+		ExpectedErrorLogs: []string{
+			"Error opening cache path test/cache/some_cache_key for reading: permission denied\n",
+			"Error opening cache path test/cache/some_cache_key for reading: permission denied\n",
+		},
+	})
+	osOpen = originalOsOpen
 }
