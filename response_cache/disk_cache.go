@@ -83,7 +83,6 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	var sf *SharedFile
 	defer release(sf)
 	defer close(ch)
-	defer cache.clearProgressTrackerFor(path)
 
 	// forward the request upstream
 	res, err := miss()
@@ -91,6 +90,7 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	// if uncacheable, send the response back to just 1 waiter, and close the channel to let others know there's no point waiting
 	if !CacheableResponse(res.StatusCode, res.Header) {
 		ch <- func() (*http.Response, error) { return res, Uncacheable }
+		cache.clearProgressTrackerFor(path)
 		return
 	}
 
@@ -112,6 +112,7 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	// we've already logged the IO error, so don't return it - it has no further impact
 	if err != nil {
 		ch <- func() (*http.Response, error) { return res, nil }
+		cache.clearProgressTrackerFor(path)
 		return
 	}
 
@@ -123,14 +124,17 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 		if err != nil {
 			// unfortunately, we can't tell if the error came from reading or writing; we'd ideally only log errors from writing
 			logCacheError("Error copying response to cache path %s: %s\n", path, err)
+			cache.clearProgressTrackerFor(path)
 			sf.Abort(err)
 		} else if res.ContentLength > 0 && n != res.ContentLength {
+			cache.clearProgressTrackerFor(path)
 			sf.Abort(errors.New(fmt.Sprintf("response should have been %d bytes but was only %d bytes", res.ContentLength, n)))
 		} else {
 			// publish the result in the cache
 			sf.Sync()
 			err = os.Rename(tempPath, path)
 			sf.Close()
+			cache.clearProgressTrackerFor(path)
 		}
 		close(done)
 	}()
