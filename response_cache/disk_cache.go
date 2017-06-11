@@ -73,7 +73,15 @@ func (cache *diskCache) clearProgressTrackerFor(path string) {
 	delete(cache.progressTrackers, path)
 }
 
+func release(sf *SharedFile) {
+	if sf != nil {
+		sf.Release()
+	}
+}
+
 func (cache *diskCache) populate(path string, ch chan func() (*http.Response, error), miss func() (*http.Response, error)) {
+	var sf *SharedFile
+	defer release(sf)
 	defer close(ch)
 	defer cache.clearProgressTrackerFor(path)
 
@@ -89,7 +97,7 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	// open a temporary file to write to
 	tempPath := path + ".temp"
 	file, err := osCreate(tempPath)
-	sf := NewSharedFile(file)
+	sf = NewSharedFile(file)
 
 	if err != nil {
 		logCacheError("Error opening cache path %s for writing: %s\n", path, err)
@@ -130,7 +138,9 @@ func (cache *diskCache) populate(path string, ch chan func() (*http.Response, er
 	readFunction := func() (*http.Response, error) {
 		reader, err := sf.SpawnReader()
 		if err != nil {
-			return nil, err
+			// SpawnReader can only fail if reference fails, and reference can only fail if the reference count dropped to 0, which
+			// isn't possible since we only decrement for the writer itself in the call to release deferred to the end of this method
+			panic(err)
 		}
 		return cache.cachedResponse(reader)
 	}

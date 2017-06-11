@@ -76,7 +76,6 @@ func (sf *SharedFile) Abort(err error) {
 	sf.cond.L.Lock()
 	defer sf.cond.L.Unlock()
 
-	sf.unreference()
 	sf.err = err
 
 	sf.cond.Broadcast()
@@ -86,7 +85,6 @@ func (sf *SharedFile) Close() (err error) {
 	sf.cond.L.Lock()
 	defer sf.cond.L.Unlock()
 
-	err = sf.unreference()
 	if sf.err == nil {
 		sf.err = io.EOF
 	}
@@ -94,6 +92,13 @@ func (sf *SharedFile) Close() (err error) {
 	sf.cond.Broadcast()
 
 	return err
+}
+
+func (sf *SharedFile) Release() (err error) {
+	sf.cond.L.Lock()
+	defer sf.cond.L.Unlock()
+
+	return sf.unreference()
 }
 
 type blockingReader struct {
