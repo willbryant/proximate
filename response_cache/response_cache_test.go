@@ -16,7 +16,7 @@ var cache ResponseCache = NewDiskCache("test/cache")
 type multiByteReader struct {
 	data      [][]byte
 	bodyError error
-	offset int
+	offset    int
 }
 
 func (reader *multiByteReader) Read(p []byte) (n int, err error) {
@@ -41,13 +41,13 @@ func (reader *multiByteReader) Close() error {
 }
 
 type scenarioData struct {
-	StatusCode        int
-	Header            http.Header
-	Data              [][]byte // more than one will result in multiple short reads, simulating network traffic
-	BodyError         error
-	ShouldCache       bool
-	ExpectedError     error
-	ExpectedErrorLogs []string
+	StatusCode           int
+	Header               http.Header
+	Data                 [][]byte // more than one will result in multiple short reads, simulating network traffic
+	BodyError            error
+	ShouldCache          bool
+	ExpectedError        error
+	ExpectedErrorLogs    []string
 	ExpectMismatchedData bool
 }
 
@@ -314,12 +314,12 @@ func TestFileOpenFailure(t *testing.T) {
 type SizeLimitedFile struct {
 	path string
 	file File
-	max int
+	max  int
 	size int
 }
 
 func (f *SizeLimitedFile) Write(p []byte) (n int, err error) {
-	if f.size + len(p) > f.max {
+	if f.size+len(p) > f.max {
 		n = f.max - f.size
 		if n > 0 {
 			f.file.Write(p[:n])
@@ -437,7 +437,7 @@ func TestFileWriteDuringBodyFailure(t *testing.T) {
 			value,
 		},
 		ExpectMismatchedData: true,
-		ShouldCache: false,
+		ShouldCache:          false,
 
 		// the file open error handler should handle and log the error, and then proceed the same as a cache miss - without returning an error
 		ExpectedError: nil,

@@ -8,7 +8,7 @@ type File interface {
 	io.ReaderAt
 	io.Writer
 	io.Closer
-	Sync() error;
+	Sync() error
 }
 
 type SharedFile struct {
